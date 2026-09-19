@@ -1,0 +1,63 @@
+{
+  "orchestrator": {
+    "provider": "Claude Code parent",
+    "requested_model": "Sonnet 5",
+    "model": "claude-sonnet-5",
+    "reasoning_effort": "high",
+    "mode": "orchestrator",
+    "status": "READY"
+  },
+  "researcher": {
+    "provider": "Claude Code CLI",
+    "requested_model": "Opus 5",
+    "model": "claude-opus-5",
+    "reasoning_effort": "low",
+    "mode": "read-only",
+    "status": "READY"
+  },
+  "planner": {
+    "provider": "Claude Code CLI",
+    "requested_model": "Fable 5.1",
+    "model": "claude-fable-5-1",
+    "reasoning_effort": "medium",
+    "mode": "read-only",
+    "status": "READY",
+    "budget": "admin-limit-only",
+    "reason": "Substitui o Astra no mesmo effort. Consome apenas o limite/saldo definido pelo administrador da organizacao; nunca solicitar ou consumir uso extra. Limite atingido retorna BLOCKED."
+  },
+  "implementer": {
+    "provider": "Claude Code CLI",
+    "requested_model": "Sonnet 5",
+    "model": "claude-sonnet-5",
+    "reasoning_effort": "medium",
+    "mode": "write",
+    "status": "READY"
+  },
+  "implementer-bulk": {
+    "provider": "AGY",
+    "requested_model": "Gemini Pro 3.1",
+    "model": "gemini-3.1-pro-high",
+    "reasoning_effort": null,
+    "mode": "write",
+    "status": "READY",
+    "reason": "native default, no --effort. CLI agy ausente nesta maquina: retorna BLOCKED/127 ate ser instalada."
+  },
+  "code-reviewer": {
+    "provider": "Claude Code CLI",
+    "requested_model": "Fable 5.1",
+    "model": "claude-fable-5-1",
+    "reasoning_effort": "high",
+    "mode": "read-only",
+    "status": "READY",
+    "budget": "admin-limit-only",
+    "reason": "Substitui o Astra no mesmo effort. Consome apenas o limite/saldo definido pelo administrador da organizacao; nunca solicitar ou consumir uso extra. Limite atingido retorna BLOCKED."
+  },
+  "verifier": {
+    "provider": "Claude Code CLI",
+    "requested_model": "Opus 5",
+    "model": "claude-opus-5",
+    "reasoning_effort": "high",
+    "mode": "read-execute",
+    "status": "READY"
+  }
+}
