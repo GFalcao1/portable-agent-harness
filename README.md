@@ -26,21 +26,24 @@ em `.harness/manifest.json` para reinstalar/atualizar de forma idempotente.
 | `skills/caveman/` | As 6 skills `caveman*` vendorizadas (copiar pra `~/.claude/skills/` ou `.claude/skills/` do projeto) |
 | `skills/superpowers/`, `skills/mattpocock-skills/` | Coleções vendorizadas (só `skills/` + LICENSE MIT + VERSION), no layout que `install.py --skills-source` aceita. Permitem instalação 100% offline |
 | `git-hooks/post-checkout` | O hook em si |
-| `examples/hermes/` | Versões preenchidas do Projeto Hermes: `project.json`, `COMPLEXIDADE.md`, seção 15 do `AGENTS.md` |
-| `tests/test_install.py` | Testes do instalador |
+| `examples/exemplo-api/` | Exemplo fictício preenchido: `project.json`, `COMPLEXIDADE.md`, contexto obrigatório do projeto |
+| `tests/` | Testes do instalador e gates da documentação (tamanho do `AGENTS.md`, fonte única de modelos, caminhos válidos) |
 | `docs/superpowers/` | Spec e plano originais do harness (histórico) |
+| `docs/decisions/` | Registros de decisão (ex.: por que os papéis Claude seguem no wrapper e não como subagentes nativos) |
 
 ### O que vai para o projeto alvo (`files/`)
 
 | Arquivo | Papel |
 |---|---|
-| `AGENTS.md` → bloco gerenciado em `AGENTS.md` e `CLAUDE.local.md` | Regras do orchestrator: matriz, lanes, paralelismo, orçamento Astra, repair loop, DoD |
-| `.agents/skills/multi-agent/SKILL.md` (+ symlink `.claude/skills/multi-agent`) | Como escolher papel, delegar e ler o retorno |
-| `tools/agents/agents.json` | Roster fixo: modelo, effort, provider, modo, status por papel |
-| `tools/agents/delegate.py` | Wrapper que spawna cada papel |
+| `AGENTS.md` → bloco gerenciado em `AGENTS.md` e `CLAUDE.local.md` | Núcleo curto sempre carregado pelo orchestrator: princípios, lanes, invariantes, DoD |
+| `.agents/skills/multi-agent/SKILL.md` (+ symlink `.claude/skills/multi-agent`) | Carregada só na hora de delegar: como escolher papel, delegar e ler o retorno |
+| `.agents/skills/multi-agent/references/` | Detalhe sob demanda: papéis, paralelismo, orçamento e lanes, repair e validação |
+| `tools/agents/agents.json` | Roster fixo e **fonte única** de modelo, effort, provider, modo e status por papel |
+| `tools/agents/delegate.py` | Wrapper que spawna cada papel e registra o uso em `.harness/usage.jsonl` |
+| `tools/agents/usage_report.py` | Relatório de custo/tokens/status/duração por papel a partir do `usage.jsonl` |
 | `tools/agents/project.json` | Comandos literais que o verifier pode executar (**adapte**) |
 | `tools/agents/README.md` | Operação, permissões, concorrência, limites conhecidos |
-| `tests/test_agent_delegation.py` | 71 testes herméticos do wrapper |
+| `tests/` | Testes herméticos do wrapper (+ teste ao vivo opcional de isolamento de contexto) |
 | `docs/agent-workflow.md` | Design writeup e histórico de emendas |
 | `task/COMPLEXIDADE.md` | Gate de complexidade que decide a lane (**adapte**) |
 
@@ -78,8 +81,8 @@ scripts direto do clone (`python3 install.py`, `./fetch-skills.sh`,
 Pré-requisitos por provider (ver `files/tools/agents/agents.json`):
 
 - `claude` autenticado (task-manager, researcher-deep, codebase-explorer, implementer, deep-debugger, verifier, docs-mechanical)
-- `codex` autenticado com acesso a `gpt-6-astra` (planner, code-reviewer, security-reviewer). Só gasta o saldo da conta; limite atingido = `BLOCKED`, nunca troca de modelo
-- `agy` (Gemini) — opcional; sem ele, `researcher-primary` e `implementation-worker` ficam `BLOCKED` e o fallback é o implementer Sonnet
+- `codex` autenticado com acesso ao modelo definido em `agents.json` (planner, code-reviewer, security-reviewer). Só gasta o saldo da conta; limite atingido = `BLOCKED`, nunca troca de modelo
+- `agy` (Gemini) — opcional; sem ele, `researcher-primary` e `implementation-worker` ficam `BLOCKED` e o fallback é o implementer
 
 Skills — duas opções:
 
@@ -135,20 +138,34 @@ contra o próprio manifesto.
 
 1. `tools/agents/project.json` — uma entrada por suíte que o verifier pode rodar. Comando literal, sem shell.
 2. `task/COMPLEXIDADE.md` — piso por área do repositório + catálogo de tasks. Sem isso a lane vira opinião.
-3. Seção 15 de `CLAUDE.local.md`/`AGENTS.md` — regras operacionais do projeto (produção, backup, convenções).
+3. Seção "Contexto obrigatório do projeto" de `CLAUDE.local.md`/`AGENTS.md` — regras operacionais do projeto (produção, backup, convenções).
 4. `ROLE_SKILLS` / `ROLE_OUTPUT_CEILING` em `delegate.py` se precisar mudar skills ou teto de linhas por papel.
-5. `CANONICAL_TEST_COMMANDS` em `delegate.py` ainda tem o default `audit` do Hermes; `project.json` o substitui em runtime, então só importa se você apagar o `project.json`.
 
-Exemplos preenchidos em `examples/hermes/`.
+O harness não traz suítes de teste embutidas: `--test-suite X` sem `X` declarado em `project.json` devolve `BLOCKED`.
+
+Exemplo fictício preenchido em `examples/exemplo-api/`.
 
 ### 6. Sanity check
 
 ```sh
 python3 tools/agents/delegate.py --agent orchestrator --smoke < /dev/null   # BLOCKED esperado
-.venv/bin/python -m pytest tests/test_agent_delegation.py -q                # 71 passed
+python3 -m pytest tests -q                                                  # suíte do wrapper
 echo "Return exactly: OK" | python3 tools/agents/delegate.py --agent codebase-explorer --smoke
-echo "Return exactly: OK" | python3 tools/agents/delegate.py --agent code-reviewer --smoke
+echo "Return exactly: OK" | python3 tools/agents/delegate.py --agent code-reviewer --smoke   # gasta saldo do Codex
 ```
+
+## Medir o uso
+
+Cada chamada do wrapper grava uma linha em `.harness/usage.jsonl` no projeto (papel, modelo, status,
+duração, tokens e custo quando o provider informa — nunca o texto da task). Para ver quanto cada papel
+custa e quantas vezes fica `BLOCKED`:
+
+```sh
+python3 tools/agents/usage_report.py                  # tabela por papel
+python3 tools/agents/usage_report.py --since 2026-10-01 --json
+```
+
+Desligar: `HARNESS_USAGE_LOG=0`. O Codex não informa custo em dólar (só tokens).
 
 ## Regras que não mudam
 
@@ -161,15 +178,21 @@ echo "Return exactly: OK" | python3 tools/agents/delegate.py --agent code-review
 Detalhes: `files/AGENTS.md` (regras), `files/tools/agents/README.md`
 (operação), `files/docs/agent-workflow.md` (design).
 
-## Testes do instalador
+## Testes
 
 ```sh
-python3 -m pytest tests/test_install.py -q
+python3 -m pytest -q tests files/tests      # instalador, gates de docs e wrapper
+HARNESS_LIVE=1 python3 -m pytest -q files/tests/test_context_isolation.py   # ao vivo, modelos baratos
 ```
+
+O teste ao vivo chama `claude` e `codex` de verdade (Haiku e o modelo barato do Codex, ajustáveis por
+`HARNESS_LIVE_CLAUDE_MODEL` / `HARNESS_LIVE_CODEX_MODEL`) e confirma que subagentes não herdam
+`CLAUDE.md`, `CLAUDE.local.md` nem `AGENTS.md`. Rode depois de atualizar qualquer CLI.
 
 ## Limites conhecidos
 
 - POSIX only; no Windows o wrapper devolve `BLOCKED`.
 - O lock de escrita só cobre chamadas via wrapper, não editores externos.
 - Nada verifica o effort do próprio orchestrator.
-- Flags de CLI muito específicas (`--plugin-dir`, `--restricted`, `agy --mode accept-edits`); reconferir após upgrade de qualquer CLI.
+- Flags de CLI muito específicas (`--plugin-dir`, `--restricted`, `project_doc_max_bytes=0`, `agy --mode accept-edits`); reconferir após upgrade de qualquer CLI com o teste ao vivo.
+- Subagentes não veem as instruções do projeto (por design): o handoff do orchestrator precisa levar o contexto necessário.
