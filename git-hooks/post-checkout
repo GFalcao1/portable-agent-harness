@@ -1,0 +1,77 @@
+#!/bin/sh
+# Auto-symlink the whole "portable-agent-harness" block from
+# .git/info/exclude into new worktrees. All of it is local-only (never
+# tracked): .claude/skills, .agents/skills, tools/agents/ (delegate.py,
+# agents.json, project.json), CLAUDE.local.md, task/COMPLEXIDADE.md, etc.
+# Without this, tools/agents/delegate.py --root <worktree> either can't
+# resolve a Claude role's skills (BLOCKED: "skill not installed:
+# caveman/caveman") or can't find tools/agents/project.json at all
+# (BLOCKED: "unknown test suite: <name>") — because --root reassigns the
+# wrapper's _REPO_ROOT to the worktree, and a fresh `git worktree add`
+# never gets these locally-excluded paths on its own (see project memory:
+# gotcha-worktree-skills-simlink).
+#
+# git runs post-checkout (with cwd set to the checked-out worktree) both on
+# ordinary checkouts and on `git worktree add`. This is a no-op on ordinary
+# checkouts in the main worktree, and a no-op for any entry that isn't
+# present in the main worktree (e.g. this hook itself runs before the file
+# exists yet on a machine that never set the harness up).
+
+common_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || exit 0
+
+case "$common_dir" in
+  */.git) main_root="${common_dir%/.git}" ;;
+  .git) main_root="$(pwd)" ;;
+  *) exit 0 ;;
+esac
+
+current_root="$(pwd)"
+
+if [ "$main_root" = "$current_root" ]; then
+  exit 0
+fi
+
+# .venv is plain .gitignore'd (every worktree normally gets its own), but
+# tools/agents/project.json's verifier test-suite commands are the literal
+# string ".venv/bin/python ...", run with cwd = worktree root when
+# delegate.py --root is used — so without a .venv there, every verifier
+# call comes back BLOCKED with "no such file or directory: .venv/bin/python".
+# One venv shared across worktrees is fine here (same interpreter/deps,
+# no per-worktree isolation need for this project).
+if [ -d "$main_root/.venv" ] && [ ! -e "$current_root/.venv" ] && [ ! -L "$current_root/.venv" ]; then
+  ln -s "$main_root/.venv" "$current_root/.venv"
+fi
+
+exclude_file="$main_root/.git/info/exclude"
+[ -f "$exclude_file" ] || exit 0
+
+in_block=0
+while IFS= read -r line; do
+  case "$line" in
+    "# portable-agent-harness:begin") in_block=1; continue ;;
+    "# portable-agent-harness:end") in_block=0; continue ;;
+  esac
+  [ "$in_block" -eq 1 ] || continue
+  case "$line" in
+    \#*|"") continue ;;
+  esac
+  # Entries are repo-root-relative, e.g. "/tools/agents/" or "/CLAUDE.local.md".
+  rel="${line#/}"
+  rel="${rel%/}"
+  [ -n "$rel" ] || continue
+
+  src="$main_root/$rel"
+  dst="$current_root/$rel"
+  if [ ! -e "$src" ] && [ ! -L "$src" ]; then
+    continue
+  fi
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    continue
+  fi
+
+  dst_parent="$(dirname "$dst")"
+  mkdir -p "$dst_parent"
+  ln -s "$src" "$dst"
+done < "$exclude_file"
+
+exit 0

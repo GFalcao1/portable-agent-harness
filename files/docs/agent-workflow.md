@@ -1,14 +1,69 @@
 # Agent workflow orchestrated by Sonnet
 
-> Project Hermes amendment, September 18 2026. The planner and code reviewer
-> roles, originally running on `gpt-6-astra` through `codex exec`, now run
-> on Claude Fable 5.1 (`claude-fable-5-1`) through the Claude Code CLI, at
-> the exact same effort levels (medium and high). Codex drops out of the
-> roster entirely. One extra rule on top of that, Fable only spends whatever
-> limit or budget the org admin already configured, a spent limit is
-> BLOCKED, and nothing in this system ever asks for or enables extra usage.
+> Project Hermes amendment, September 28 2026. The role matrix moved from
+> seven roles to the thirteen-entry matrix (orchestrator plus twelve spawned
+> roles) defined in `CLAUDE.local.md` section 2 and mirrored in
+> `agents.json`. The "Role matrix" section below, and every reference to
+> `researcher` or `implementer-bulk` as role names, is **superseded**.
+>
+> New roster: `orchestrator` (unchanged), `task-manager` (Opus 5.5, high,
+> Claude Code CLI, replaces nothing, new role), `planner` (Astra, medium,
+> Codex CLI, unchanged), `researcher-primary` (Gemini 3.8 Flash, native
+> effort, AGY, `--mode plan`, replaces `researcher`), `researcher-deep`
+> (Fable 5.1, medium, Claude Code CLI, new role, called only when research
+> is contentious or CRITICAL), `codebase-explorer` (Sonnet 5, medium, Claude
+> Code CLI, new role), `implementer` (Sonnet 5, medium, Claude Code CLI,
+> unchanged), `implementation-worker` (Gemini 3.8 Flash, native effort, AGY,
+> `--mode accept-edits`, replaces `implementer-bulk`), `deep-debugger` (Opus
+> 5.5, high, Claude Code CLI, new role), `code-reviewer` (Astra, **medium**,
+> down from high, Codex CLI), `security-reviewer` (Astra, medium, Codex CLI,
+> new role, same mechanics as `code-reviewer`), `verifier` (**Sonnet 5**,
+> **medium**, down from Opus 5.5 high, Claude Code CLI) and
+> `docs-mechanical` (Sonnet 5, low, Claude Code CLI, new role).
+>
+> Astra budget changed to match the new roles: CRITICAL work spends at most
+> one planner call plus one code reviewer call, plus one extra security
+> reviewer call only when the change is materially security-relevant (auth,
+> authz, credentials, secrets, PII, upload, untrusted parsing, external
+> execution, network, SQL, permissions, destructive ops); IMPORTANT spends
+> at most one code reviewer call; SMALL and TRIVIAL spend zero.
+>
+> `agy` (1.2.7) is now installed at `~/.local/bin/agy` on this machine,
+> unlike the September 11 write-up below which still treated it as entirely
+> hypothetical. Both AGY roles (`researcher-primary`,
+> `implementation-worker`) passed a real smoke test on September 28 2026,
+> so Lane B is validated on this machine; the implementer (Sonnet)
+> remains the only sanctioned fallback, never a silent model swap. Note
+> that `agy` ignores `--mode plan` while `--disable-slash-commands` is on,
+> so the read-only guarantee for `researcher-primary` comes from
+> `--sandbox`. Current
+> source of truth for skills, tools and output ceilings per role:
+> `tools/agents/README.md` and `tools/agents/delegate.py`
+> (`ROLE_SKILLS`/`ROLE_TOOLS`/`ROLE_OUTPUT_CEILING`).
+>
+> The "Write isolation" section below still describes two spawned writer
+> roles sharing the lock; there are three now (`implementer`,
+> `implementation-worker`, `docs-mechanical`), enforced by `WRITER_ROLES` in
+> `delegate.py`. That section, like "Role matrix", is superseded.
+>
+> Project Hermes amendment, September 19 2026. The September 18 amendment
+> below moved planner and code reviewer onto Claude Fable 5.1; that move was
+> reverted the next day back onto `gpt-6-astra` through `codex exec`, at the
+> exact same effort levels (medium and high). `agents.json` and this
+> project's `AGENTS.md` are the live source of truth and both say Astra.
+> Kept the September 18 text as history right below, since it is a real
+> record of what was tried; read "Fable 5.1" in it as superseded.
+>
+> Project Hermes amendment, September 18 2026 (superseded, see above). The
+> planner and code reviewer roles, originally running on `gpt-6-astra`
+> through `codex exec`, moved onto Claude Fable 5.1 (`claude-fable-5-1`)
+> through the Claude Code CLI, at the exact same effort levels (medium and
+> high). One extra rule on top of that, Fable only spends whatever limit or
+> budget the org admin already configured, a spent limit is BLOCKED, and
+> nothing in this system ever asks for or enables extra usage.
 > Everything below keeps the original design writeup intact, wherever it
-> still says "Astra" read that as "Fable 5.1" for this project.
+> still says "Astra" that is, again, the live configuration for this
+> project.
 
 Date, September 11 2026.
 Scope, the role matrix, provider routing, the Gemini and Sonnet split, the
@@ -31,15 +86,13 @@ or ever allowing a silent model swap.
 * orchestrator, `claude-sonnet-5`, effort high, runs as the parent Claude
   Code session, mode write
 * researcher, `claude-opus-5`, effort low, Claude Code CLI, mode read only
-* planner, `claude-fable-5-1`, effort medium, Claude Code CLI, mode read
-  only
+* planner, `gpt-6-astra`, effort medium, Codex CLI, mode read only
 * implementer, `claude-sonnet-5`, effort medium, Claude Code CLI, mode
   write
 * implementer bulk, `gemini-3.1-pro-high`, native effort, AGY, mode write,
   only inside a worktree
-* code reviewer, `claude-fable-5-1`, effort high, Claude Code CLI, mode
-  read only
-* verifier, `claude-opus-5`, effort high, Claude Code CLI, mode read and
+* code reviewer, `gpt-6-astra`, effort high, Codex CLI, mode read only
+* verifier, `claude-opus-5-5`, effort high, Claude Code CLI, mode read and
   execute
 
 The `plan-reviewer` role stops existing. Critiquing the plan becomes the
@@ -66,17 +119,17 @@ Astra ended up owning the planner and code reviewer roles because it wrote
 those 65 task files in the first place. Keeping it on critical planning
 keeps things consistent with the contracts it defined itself.
 
-### Fable 5.1 budget (Project Hermes)
+### Astra account budget (Project Hermes)
 
-Planner and code reviewer share the exact same admin defined Fable limit.
-Claude Code gives no programmatic control over extra usage at all, so the
-guarantee comes from three things together, the admin not enabling extra
-credit, the wrapper treating a 429 or a "usage limit" or "spend limit"
-message as BLOCKED without ever retrying on its own, and the instructions
-flatly forbidding `/usage-credits` or swapping the model. At most two Fable
+Planner and code reviewer share the exact same Codex/ChatGPT account limit.
+Neither Codex nor Claude Code give programmatic control over extra usage, so
+the guarantee comes from three things together, the account not having extra
+credit enabled, the wrapper treating a 429 or a "usage limit" message as
+BLOCKED without ever retrying on its own, and the instructions flatly
+forbidding an upgrade request or swapping the model. At most two Astra
 calls per CRITICAL task, one call everywhere else.
 
-### Codex account budget (history from the original harness)
+### Codex account budget (history)
 
 `gpt-6-astra` and `gpt-5.6-sol` shared the same account and the same limit,
 switching between Codex models never actually freed up any quota. Once the
@@ -196,19 +249,17 @@ skills, symlinked straight from the installed versions. That excludes any
 third party hook by construction, which matters because `superpowers`
 ships a `session-start` hook that must never run inside a spawned child.
 
-* researcher, `mattpocock-skills/engineering/research`
-* implementer, `mattpocock-skills/engineering/tdd`,
+* researcher, verifier: `caveman/caveman`
+* planner: `caveman/caveman`, `superpowers/writing-plans`
+* implementer: `caveman/caveman`, `mattpocock-skills/engineering/tdd`,
   `superpowers/executing-plans`
-* verifier, nothing
-* implementer bulk, nothing, AGY keeps `--disable-slash-commands` on
-* planner and code reviewer, nothing, since Codex does not load Claude
-  skills at all
+* code reviewer: `caveman/caveman`, `mattpocock-skills/engineering/code-review`
+* implementer bulk: nothing, AGY keeps `--disable-slash-commands` on
 
-Note this table describes the original Codex based design from September
-11 2026. After the Fable 5.1 migration, planner and code reviewer run
-through the Claude Code CLI like everyone else, so they do carry
-`caveman/caveman` same as the other read only roles now. `tools/agents/README.md`
-is the current source of truth for what each role actually gets.
+Planner and code reviewer run on Codex, which has no `--plugin-dir`
+mechanism, so the wrapper prepends the skill text straight to their prompt
+instead of building a plugin. `tools/agents/README.md` is the current
+source of truth for what each role actually gets.
 
 A skill that gets declared but is missing from the environment always
 results in BLOCKED. There is no silent fallback here, same rule that

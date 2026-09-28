@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Entry point global do harness. Funciona de qualquer pasta onde o repo
+# esteja clonado: resolve o proprio caminho (seguindo symlinks) para achar
+# os scripts irmaos. Exponha no PATH com um symlink, ex.:
+#   ln -s "$PWD/agent-harness" ~/.local/bin/agent-harness
+set -euo pipefail
+
+src="${BASH_SOURCE[0]}"
+while [[ -L "$src" ]]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" != /* ]] && src="$dir/$src"
+done
+HARNESS_HOME="$(cd -P "$(dirname "$src")" && pwd)"
+
+case "${1:-}" in
+  home)         echo "$HARNESS_HOME" ;;
+  fetch-skills) shift; exec "$HARNESS_HOME/fetch-skills.sh" "$@" ;;
+  hook)         shift; exec "$HARNESS_HOME/install-worktree-hook.sh" "$@" ;;
+  *)            exec python3 "$HARNESS_HOME/install.py" "$@" ;;
+esac
