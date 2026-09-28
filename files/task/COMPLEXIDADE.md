@@ -38,8 +38,8 @@ Se `agy` não estiver instalado na máquina, o fallback é o implementer direto
 
 O piso vale para qualquer alteração na área, independentemente do tamanho do diff.
 
-<!-- ADAPTE: uma linha por área do SEU repositório. Exemplo real preenchido em
-     examples/hermes/task/COMPLEXIDADE.md no repo do harness. -->
+<!-- ADAPTE: uma linha por área do SEU repositório. Exemplo preenchido em
+     examples/exemplo-api/task/COMPLEXIDADE.md no repo do harness. -->
 
 | Área | Piso | Motivo |
 |---|---|---|

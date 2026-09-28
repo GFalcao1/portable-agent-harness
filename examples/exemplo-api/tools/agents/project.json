@@ -1,0 +1,8 @@
+{
+  "_comment": "Exemplo API (fictícia). Comandos literais que o verifier pode executar via --test-suite. Sem operadores de shell nem wildcards; rodam a partir da raiz do repositorio, usando o venv do projeto.",
+  "test_commands": {
+    "unit": ".venv/bin/python -m pytest tests/test_domain -q",
+    "integration": ".venv/bin/python -m pytest tests/test_routes_livros.py tests/test_routes_emprestimos.py -q",
+    "lint": ".venv/bin/ruff check ."
+  }
+}

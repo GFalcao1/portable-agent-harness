@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime
 import hashlib
 import json
 import math
@@ -20,6 +21,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -93,14 +95,11 @@ ROLE_SKILLS: dict[str, tuple[str, ...]] = {
 PLUGIN_CACHE_ROOT = (
     Path.home() / ".claude" / "plugins" / "cache" / "claude-plugins-official"
 )
-# Projeto Hermes: defaults minimos; a lista completa (audit, parametrizacao,
-# unit, lint) vive em tools/agents/project.json, que substitui este dict em
-# tempo de execucao. O comando é literal; o verifier não pode alterá-lo.
-# Acrescente suites em project.json em vez de conceder shell irrestrito.
-CANONICAL_TEST_COMMANDS: dict[str, str] = {
-    "agents": ".venv/bin/python -m pytest tests/test_agent_delegation.py -q",
-    "audit": ".venv/bin/python -m pytest tests/test_audit_e2e.py tests/test_status_progress.py -q",
-}
+# No built-in test suites: every project declares its own in
+# tools/agents/project.json, which replaces this dict at runtime. The
+# command is literal; the verifier cannot alter it. Add suites in
+# project.json instead of granting unrestricted shell.
+CANONICAL_TEST_COMMANDS: dict[str, str] = {}
 
 EXIT_MISSING_EXECUTABLE = 127
 EXIT_TIMEOUT = 124
@@ -544,6 +543,10 @@ def parse_claude_stream(stdout_text: str, expected_model: str) -> dict[str, Any]
             "session_id": result_event.get("session_id"),
             "duration": duration,
             "usage": result_event.get("usage"),
+            # Kept out of the printed contract; main() excludes it before
+            # building the normalized result and only reads it for the
+            # usage log (see log_usage / build_usage_record).
+            "total_cost_usd": result_event.get("total_cost_usd"),
             "num_turns": result_event.get("num_turns"),
             "reported_model": None,
             "auxiliary_models": [],
@@ -593,6 +596,9 @@ def parse_claude_stream(stdout_text: str, expected_model: str) -> dict[str, Any]
         "session_id": result_event.get("session_id"),
         "duration": duration,
         "usage": result_event.get("usage"),
+        # See the permission_denials branch above: excluded from the
+        # printed contract, read only by the usage log.
+        "total_cost_usd": result_event.get("total_cost_usd"),
         "num_turns": result_event.get("num_turns"),
         "reported_model": reported_model,
         "auxiliary_models": auxiliary_models,
@@ -620,6 +626,50 @@ def claude_allowed_tools(
     return tools
 
 
+def build_claude_argv(
+    *,
+    model: str,
+    effort: str,
+    tool_names: list[str],
+    allowed_tools: list[str],
+    permission_mode: str,
+    plugin_dir: str | None = None,
+) -> list[str]:
+    """Build the argv for a Claude Code sub-agent invocation.
+
+    Pure function: no I/O, no env/process access. `plugin_dir` is appended
+    only when given, matching the conditional append in run_claude_agent.
+    """
+    argv = [
+        "claude",
+        "--print",
+        "--model",
+        model,
+        "--effort",
+        effort,
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--no-session-persistence",
+        # Also what keeps CLAUDE.md / CLAUDE.local.md out of sub-agent
+        # context: without --restricted, project instruction files load
+        # and the orchestrator's manual leaks into every role's prompt.
+        "--restricted",
+        "--strict-mcp-config",
+        "--permission-prompts",
+        "none",
+        "--permission-mode",
+        permission_mode,
+        "--tools",
+        ",".join(tool_names),
+        "--allowedTools",
+        ",".join(allowed_tools),
+    ]
+    if plugin_dir is not None:
+        argv += ["--plugin-dir", plugin_dir]
+    return argv
+
+
 def run_claude_agent(
     agent: str,
     role: dict[str, Any],
@@ -634,28 +684,6 @@ def run_claude_agent(
     tool_names = claude_tool_names(agent, smoke=smoke, test_suite=test_suite)
     allowed_tools = claude_allowed_tools(agent, smoke=smoke, test_suite=test_suite)
     permission_mode = "dontAsk" if smoke else PERMISSION_MODES[agent]
-    argv = [
-        "claude",
-        "--print",
-        "--model",
-        model,
-        "--effort",
-        effort,
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--no-session-persistence",
-        "--restricted",
-        "--strict-mcp-config",
-        "--permission-prompts",
-        "none",
-        "--permission-mode",
-        permission_mode,
-        "--tools",
-        ",".join(tool_names),
-        "--allowedTools",
-        ",".join(allowed_tools),
-    ]
     env = dict(os.environ)
     env["CLAUDE_CODE_EFFORT_LEVEL"] = effort
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
@@ -671,8 +699,14 @@ def run_claude_agent(
 
     with tempfile.TemporaryDirectory(prefix="harness-skills-") as skill_tmp:
         plugin_dir = None if smoke else build_skill_plugin(agent, Path(skill_tmp))
-        if plugin_dir is not None:
-            argv += ["--plugin-dir", str(plugin_dir)]
+        argv = build_claude_argv(
+            model=model,
+            effort=effort,
+            tool_names=tool_names,
+            allowed_tools=allowed_tools,
+            permission_mode=permission_mode,
+            plugin_dir=None if plugin_dir is None else str(plugin_dir),
+        )
         returncode, stdout, stderr = run_child(
             argv, env=env, input_text=prompt, timeout=timeout
         )
@@ -684,20 +718,11 @@ def run_claude_agent(
     return parsed
 
 
-def run_agy_agent(
-    agent: str, role: dict[str, Any], task: str, *, smoke: bool, timeout: float
-) -> dict[str, Any]:
-    model = role["model"]
-    prompt = ROLE_PROMPT_TEMPLATE.format(
-        agent=agent,
-        mode=role["mode"],
-        task=task,
-        test_clause="",
-        budget_clause=token_budget_clause(agent),
-    )
-    # A smoke proves identity only; it never grants write access.
-    writes = agent in WRITER_ROLES and not smoke
-    argv = [
+def build_agy_argv(
+    *, model: str, writes: bool, timeout: float, prompt: str
+) -> list[str]:
+    """Build the argv for an AGY sub-agent invocation. Pure function."""
+    return [
         "agy",
         "--model",
         model,
@@ -714,6 +739,22 @@ def run_agy_agent(
         os.devnull,
         f"--print={prompt}",
     ]
+
+
+def run_agy_agent(
+    agent: str, role: dict[str, Any], task: str, *, smoke: bool, timeout: float
+) -> dict[str, Any]:
+    model = role["model"]
+    prompt = ROLE_PROMPT_TEMPLATE.format(
+        agent=agent,
+        mode=role["mode"],
+        task=task,
+        test_clause="",
+        budget_clause=token_budget_clause(agent),
+    )
+    # A smoke proves identity only; it never grants write access.
+    writes = agent in WRITER_ROLES and not smoke
+    argv = build_agy_argv(model=model, writes=writes, timeout=timeout, prompt=prompt)
     # Claude session controls must not leak into a different provider.
     env = {
         name: value
@@ -869,6 +910,34 @@ def _codex_failure_message(event: dict[str, Any]) -> str:
     return "provider reported an unspecified failure"
 
 
+def build_codex_argv(
+    *, model: str, reasoning_effort: str, sandbox_mode: str, last_message_path: str
+) -> list[str]:
+    """Build the argv for a Codex sub-agent invocation. Pure function."""
+    return [
+        "codex",
+        "exec",
+        "--model",
+        model,
+        "-c",
+        f"model_reasoning_effort={reasoning_effort}",
+        "--sandbox",
+        sandbox_mode,
+        "--ephemeral",
+        "--skip-git-repo-check",
+        # Codex loads AGENTS.md from cwd by default; sub-agents must not
+        # inherit the orchestrator's AGENTS.md manual, so cap the project
+        # doc it reads to zero bytes. The handoff prompt already carries
+        # the context each role needs.
+        "-c",
+        "project_doc_max_bytes=0",
+        "--json",
+        "--output-last-message",
+        last_message_path,
+        "-",
+    ]
+
+
 def run_codex_agent(
     agent: str, role: dict[str, Any], task: str, *, timeout: float, smoke: bool = False
 ) -> dict[str, Any]:
@@ -884,22 +953,14 @@ def run_codex_agent(
         prompt = skill_instructions(agent) + "\n\n" + prompt
     with tempfile.TemporaryDirectory(prefix="harness-codex-") as workdir:
         last_message = Path(workdir) / "last-message.txt"
-        argv = [
-            "codex",
-            "exec",
-            "--model",
-            model,
-            "-c",
-            f"model_reasoning_effort={role['reasoning_effort']}",
-            "--sandbox",
-            "workspace-write" if role["mode"] == "write" and not smoke else "read-only",
-            "--ephemeral",
-            "--skip-git-repo-check",
-            "--json",
-            "--output-last-message",
-            str(last_message),
-            "-",
-        ]
+        argv = build_codex_argv(
+            model=model,
+            reasoning_effort=role["reasoning_effort"],
+            sandbox_mode=(
+                "workspace-write" if role["mode"] == "write" and not smoke else "read-only"
+            ),
+            last_message_path=str(last_message),
+        )
         # Claude session controls must not leak into a different provider.
         env = {
             name: value
@@ -922,7 +983,155 @@ def run_codex_agent(
     return parsed
 
 
+# ---------------------------------------------------------------------------
+# Usage log: one append-only JSON-lines record per invocation at
+# <repo>/.harness/usage.jsonl, so per-role cost/token spend can be audited
+# with tools/agents/usage_report.py. A logging failure never changes the
+# verdict or exit code (see log_usage). Opt out with HARNESS_USAGE_LOG=0.
+#
+# Provider usage-dict field names below are evidenced, not guessed:
+# - Claude Code CLI: the stream-json result event's `usage` object uses the
+#   Anthropic Messages API shape (input_tokens, output_tokens,
+#   cache_creation_input_tokens, cache_read_input_tokens); `total_cost_usd`
+#   is a sibling field on the same result event (confirmed against the
+#   bundled @anthropic-ai/claude-agent-sdk, which reads exactly these
+#   `usage.*` keys and documents `total_cost_usd` as the SDK's cost field).
+# - Codex CLI: `codex exec --json` emits a `turn.completed` event whose
+#   `usage` object uses input_tokens/cached_input_tokens/
+#   cache_write_input_tokens/output_tokens/reasoning_output_tokens
+#   (confirmed via the codex binary's embedded TurnCompletedEvent field
+#   strings); no USD cost field is present anywhere in that stream, so
+#   cost_usd is always null for Codex.
+# - AGY: run_agy_agent already passes payload["usage"] through opaquely and
+#   nothing in this wrapper or its tests pins down AGY's field names, so
+#   the same Claude-style aliases are tried best-effort and anything absent
+#   logs null; cost_usd is always null for AGY (no cost field is exposed to
+#   this wrapper).
+# ---------------------------------------------------------------------------
+
+_USAGE_LOG_DISABLE_ENV = "HARNESS_USAGE_LOG"
+
+_USAGE_FIELD_MAP: dict[str, dict[str, str]] = {
+    "Claude Code CLI": {
+        "input_tokens": "input_tokens",
+        "output_tokens": "output_tokens",
+        "cache_read_tokens": "cache_read_input_tokens",
+        "cache_creation_tokens": "cache_creation_input_tokens",
+    },
+    "Codex CLI": {
+        "input_tokens": "input_tokens",
+        "output_tokens": "output_tokens",
+        "cache_read_tokens": "cached_input_tokens",
+        "cache_creation_tokens": "cache_write_input_tokens",
+    },
+    "AGY": {
+        # Unverified: no field names for AGY's usage payload are documented
+        # anywhere in this wrapper or its tests; best-effort aliases only.
+        "input_tokens": "input_tokens",
+        "output_tokens": "output_tokens",
+        "cache_read_tokens": "cache_read_input_tokens",
+        "cache_creation_tokens": "cache_creation_input_tokens",
+    },
+}
+
+
+def _extract_usage_tokens(provider: Any, usage: Any) -> dict[str, int | None]:
+    tokens: dict[str, int | None] = {
+        "input_tokens": None,
+        "output_tokens": None,
+        "cache_read_tokens": None,
+        "cache_creation_tokens": None,
+    }
+    if not isinstance(usage, dict):
+        return tokens
+    for out_key, source_key in _USAGE_FIELD_MAP.get(provider, {}).items():
+        value = usage.get(source_key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            tokens[out_key] = value
+    return tokens
+
+
+def build_usage_record(
+    *,
+    agent: str,
+    role: dict[str, Any],
+    result_status: str,
+    smoke: bool,
+    duration_s: float,
+    exit_code: int | None,
+    task_text: str | None,
+    outcome: dict[str, Any],
+) -> dict[str, Any]:
+    provider = role.get("provider")
+    tokens = _extract_usage_tokens(provider, outcome.get("usage"))
+    cost = outcome.get("total_cost_usd")
+    cost_usd = cost if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None
+    if task_text is None:
+        task_sha256: str | None = None
+        task_chars = 0
+    else:
+        task_sha256 = hashlib.sha256(task_text.encode("utf-8")).hexdigest()
+        task_chars = len(task_text)
+    return {
+        "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "agent": agent,
+        "provider": provider,
+        "model": role.get("model"),
+        "status": result_status,
+        "smoke": bool(smoke),
+        "duration_s": duration_s,
+        "exit_code": exit_code,
+        "input_tokens": tokens["input_tokens"],
+        "output_tokens": tokens["output_tokens"],
+        "cache_read_tokens": tokens["cache_read_tokens"],
+        "cache_creation_tokens": tokens["cache_creation_tokens"],
+        "cost_usd": cost_usd,
+        "task_sha256": task_sha256,
+        "task_chars": task_chars,
+    }
+
+
+def log_usage(
+    agent: str,
+    role: dict[str, Any],
+    outcome: dict[str, Any],
+    *,
+    status: str,
+    smoke: bool,
+    duration_s: float,
+    exit_code: int | None,
+    task_text: str | None,
+) -> None:
+    """Append one usage-log line. Never raises; never touches the verdict."""
+    if os.environ.get(_USAGE_LOG_DISABLE_ENV) == "0":
+        return
+    try:
+        record = build_usage_record(
+            agent=agent,
+            role=role,
+            result_status=status,
+            smoke=smoke,
+            duration_s=duration_s,
+            exit_code=exit_code,
+            task_text=task_text,
+            outcome=outcome,
+        )
+        log_dir = _REPO_ROOT / ".harness"
+        log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        line = (json.dumps(record, sort_keys=True) + "\n").encode("utf-8")
+        fd = os.open(
+            str(log_dir / "usage.jsonl"), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600
+        )
+        try:
+            os.write(fd, line)
+        finally:
+            os.close(fd)
+    except Exception as exc:  # noqa: BLE001 - logging must never break the verdict
+        print(f"warning: usage log append failed: {exc}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
+    start_time = time.monotonic()
     try:
         agents = load_agents()
         validate_agents(agents)
@@ -953,6 +1162,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.root is not None:
         root = args.root.resolve()
         if not root.is_dir() or not (root / ".git").exists():
+            log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                      duration_s=time.monotonic() - start_time, exit_code=None, task_text=None)
             print(json.dumps(normalized(agent=args.agent, role=role, status="BLOCKED",
                                         response="--root must be an existing repository or worktree root",
                                         exit_code=None)))
@@ -975,15 +1186,22 @@ def main(argv: list[str] | None = None) -> int:
         if "skills" in role:
             ROLE_SKILLS[args.agent] = tuple(role["skills"])
         if args.test_suite and args.test_suite not in CANONICAL_TEST_COMMANDS:
-            raise ValueError(f"unknown test suite: {args.test_suite}")
+            raise ValueError(
+                f"unknown test suite: {args.test_suite!r}; declare it in "
+                "tools/agents/project.json under test_commands"
+            )
         if args.test_suite and role["provider"] != "Claude Code CLI":
             raise ValueError("exact test-command permissions require the Claude verifier; run tests in the parent session otherwise")
     except (OSError, ValueError, KeyError, TypeError) as exc:
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=None, task_text=None)
         print(json.dumps(normalized(agent=args.agent, role=role, status="BLOCKED",
                                     response=f"invalid project configuration: {exc}", exit_code=None)))
         return 1
 
     if os.name != "posix":
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=None, task_text=None)
         print(
             json.dumps(
                 normalized(
@@ -1001,6 +1219,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if role["status"] == "BLOCKED" or role["model"] is None:
         reason = role.get("reason", "role is blocked")
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=None, task_text=None)
         print(
             json.dumps(
                 normalized(
@@ -1015,6 +1235,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.agent == "orchestrator":
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=None, task_text=None)
         print(
             json.dumps(
                 normalized(
@@ -1035,6 +1257,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         task = read_task(args)
     except OSError:
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=None, task_text=None)
         print(
             json.dumps(
                 normalized(
@@ -1080,6 +1304,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             outcome = dispatch()
     except SkillUnavailable as exc:
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=None, task_text=task)
         print(
             json.dumps(
                 normalized(
@@ -1093,6 +1319,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     except FileNotFoundError:
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=EXIT_MISSING_EXECUTABLE,
+                  task_text=task)
         print(
             json.dumps(
                 normalized(
@@ -1106,6 +1335,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return EXIT_MISSING_EXECUTABLE
     except subprocess.TimeoutExpired:
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=EXIT_TIMEOUT, task_text=task)
         print(
             json.dumps(
                 normalized(
@@ -1119,6 +1350,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return EXIT_TIMEOUT
     except OSError:
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=None, task_text=task)
         print(
             json.dumps(
                 normalized(
@@ -1132,6 +1365,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     except KeyboardInterrupt:
+        log_usage(args.agent, role, {}, status="BLOCKED", smoke=args.smoke,
+                  duration_s=time.monotonic() - start_time, exit_code=128 + signal.SIGINT,
+                  task_text=task)
         print(
             json.dumps(
                 normalized(
@@ -1154,9 +1390,12 @@ def main(argv: list[str] | None = None) -> int:
         **{
             k: v
             for k, v in outcome.items()
-            if k not in {"status", "response", "exit_code"}
+            if k not in {"status", "response", "exit_code", "total_cost_usd"}
         },
     )
+    log_usage(args.agent, role, outcome, status=result["status"], smoke=args.smoke,
+              duration_s=time.monotonic() - start_time, exit_code=result["exit_code"],
+              task_text=task)
     print(json.dumps(result))
     return 0 if result["status"] == "PASS" else 1
 
