@@ -10,10 +10,6 @@ um modelo, effort, provider e conjunto de tools, mais o wrapper
 `tools/agents/delegate.py` que spawna os papéis com argv travado, aplica lock
 de escrita e devolve um veredito `PASS | FAIL | BLOCKED` em JSON.
 
-Origem: extraído do Projeto Hermes em 2026-09-28 (matriz de 12 papéis,
-smoke test 9/9 PASS). Versão anterior (7 papéis, 2026-09-18) está no
-histórico do repositório de origem.
-
 Tudo que é instalado é **config pessoal, nunca versionada** no projeto alvo:
 o instalador escreve um bloco em `.git/info/exclude` e mantém um manifesto
 em `.harness/manifest.json` para reinstalar/atualizar de forma idempotente.
