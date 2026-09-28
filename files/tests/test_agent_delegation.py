@@ -64,6 +64,9 @@ def hermetic_skill_cache(
     tests that exercise a missing skill override this explicitly.
     """
     cache = tmp_path_factory.mktemp("plugin-cache")
+    # _REPO_ROOT stays pointed at this checkout below; keep test runs out of
+    # the project's real usage log (test_usage_log.py covers logging).
+    monkeypatch.setenv("HARNESS_USAGE_LOG", "0")
     monkeypatch.setattr(delegate, "ROLE_SKILLS", dict(delegate.ROLE_SKILLS))
     monkeypatch.setattr(delegate, "CANONICAL_TEST_COMMANDS", dict(delegate.CANONICAL_TEST_COMMANDS))
     for specs in delegate.ROLE_SKILLS.values():
@@ -266,9 +269,9 @@ def test_verifier_test_suite_scopes_bash_to_exact_command(
     assert set(tools) == {"Read", "Glob", "Grep", "Bash"}
     allowed = argv[argv.index("--allowedTools") + 1].split(",")
     assert "Bash" not in allowed
-    assert "Bash(.venv/bin/python -m pytest tests/test_agent_delegation.py -q)" in allowed
+    assert "Bash(python3 -m pytest tests/test_agent_delegation.py -q)" in allowed
     assert set(allowed) - {
-        "Bash(.venv/bin/python -m pytest tests/test_agent_delegation.py -q)"
+        "Bash(python3 -m pytest tests/test_agent_delegation.py -q)"
     } == {"Read", "Glob", "Grep"}
 
 

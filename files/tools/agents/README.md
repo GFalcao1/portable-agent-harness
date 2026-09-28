@@ -1,60 +1,36 @@
 # Local multi agent setup
 
-This layer only serves the twelve roles of this project. The orchestrator is
-the main Claude Code session and it is the one holding decisions and task
-state. The `multi-agent` skill prepares self contained handoffs and this
-wrapper calls the Claude Code CLI, the Codex CLI (for planner, code
-reviewer and security reviewer) and AGY, whenever it is installed. There is
-no server and no daemon running anywhere.
+This layer only serves the twelve spawned roles of this project plus the
+orchestrator. The orchestrator is the main Claude Code session and it is
+the one holding decisions and task state. The `multi-agent` skill prepares
+self contained handoffs and this wrapper calls the Claude Code CLI, the
+Codex CLI (for planner, code reviewer and security reviewer) and AGY,
+whenever it is installed. There is no server and no daemon running
+anywhere.
 
 ## The fixed roster
 
-* orchestrator, requested Sonnet 5, resolves to `claude-sonnet-5`, runs as
-  the parent Claude Code session, effort high, status READY
-* task manager, requested Opus 5.5, resolves to `claude-opus-5-5`, Claude
-  Code CLI, effort high, status READY
-* planner, requested Astra, resolves to `gpt-6-astra`, Codex CLI, effort
-  medium, status READY
-* researcher primary, requested Gemini 3.8 Flash, resolves to
-  `gemini-3.8-flash-high`, provider AGY, native effort baked into the model
-  id suffix, status READY, smoke test passed on September 28 2026 (`agy`
-  1.2.7; one transient FAIL under 7 parallel calls, PASS on a single retry)
-* researcher deep, requested Fable 5.1, resolves to `claude-fable-5-1`,
-  Claude Code CLI, effort medium, status READY
-* codebase explorer, requested Sonnet 5, resolves to `claude-sonnet-5`,
-  Claude Code CLI, effort medium, status READY
-* implementer, requested Sonnet 5, resolves to `claude-sonnet-5`, Claude
-  Code CLI, effort medium, status READY
-* implementation worker, requested Gemini 3.8 Flash, resolves to
-  `gemini-3.8-flash-medium`, provider AGY, native effort, status READY, smoke
-  test passed on September 28 2026
-* deep debugger, requested Opus 5.5, resolves to `claude-opus-5-5`, Claude
-  Code CLI, effort high, status READY
-* code reviewer, requested Astra, resolves to `gpt-6-astra`, Codex CLI,
-  effort medium, status READY
-* security reviewer, requested Astra, resolves to `gpt-6-astra`, Codex CLI,
-  effort medium, status READY
-* verifier, requested Sonnet 5, resolves to `claude-sonnet-5`, Claude Code
-  CLI, effort medium, status READY
-* docs mechanical, requested Sonnet 5, resolves to `claude-sonnet-5`, Claude
-  Code CLI, effort low, status READY
-
-The single source of truth for all of this is `agents.json`. READY only
-means declared and covered by a test, it says nothing about authentication,
+`agents.json` in this directory is the single source of truth for every
+role's model, effort, provider and status — do not duplicate those values
+here, they drift. The roster currently has thirteen entries: `orchestrator`
+plus the twelve spawned roles (`task-manager`, `planner`,
+`researcher-primary`, `researcher-deep`, `codebase-explorer`,
+`implementer`, `implementation-worker`, `deep-debugger`, `code-reviewer`,
+`security-reviewer`, `verifier`, `docs-mechanical`). READY only means
+declared and covered by a test, it says nothing about authentication,
 quota or future availability.
 
-Astra owns the planner, code reviewer and security reviewer roles because it
-wrote the 65 task files under `task/` in the first place (see
-`docs/agent-workflow.md`); keeping it on critical planning and review keeps
-things consistent with the contracts it defined itself.
+`planner`, `code-reviewer` and `security-reviewer` are intentionally routed
+to the Codex CLI, kept consistent with the task contracts under `task/`;
+see `docs/agent-workflow.md` for the design rationale.
 
-## Astra account budget
+## Account budget for the Codex-based roles
 
-Astra roles (planner, code reviewer, security reviewer) only spend whatever
-limit the linked ChatGPT/Codex account already has; `agents.json` does not
-need a dedicated field for this since the enforcement lives in the wrapper
-and in these instructions, not in the roster file. The guarantee sits on
-three layers.
+The Codex-based roles (planner, code reviewer, security reviewer) only
+spend whatever limit the linked ChatGPT/Codex account already has;
+`agents.json` does not need a dedicated field for this since the
+enforcement lives in the wrapper and in the harness instructions, not in
+the roster file. The guarantee sits on three layers.
 
 1. Account side. Whatever plan or limit the linked Codex account has,
    outside this harness entirely. The wrapper has no way to touch that, by
@@ -63,16 +39,11 @@ three layers.
    limit", HTTP 429) comes back as BLOCKED, never FAIL, never PASS, and the
    wrapper does not retry on its own. The markers live in `QUOTA_MARKERS`
    inside `delegate.py`.
-3. Instruction side. `AGENTS.md`, `CLAUDE.local.md` and the skill itself all
-   forbid the orchestrator from upgrading the plan, buying credits, or
-   swapping Astra for a different model when it gets blocked.
+3. Instruction side. `AGENTS.md` and the `multi-agent` skill forbid the
+   orchestrator from upgrading the plan, buying credits, or swapping a
+   Codex-based role for a different model when it gets blocked.
 
-Budget per task: on CRITICAL work, at most one planner call plus one code
-reviewer call, plus one extra security reviewer call only when the change is
-materially security-relevant (auth, authz, credentials, secrets, PII,
-upload, untrusted parsing, external execution, network, SQL, permissions,
-destructive ops). On IMPORTANT work, one code reviewer call. On SMALL and
-TRIVIAL, zero Astra calls.
+Budget per task lives in `.agents/skills/multi-agent/references/orcamento-e-lanes.md`.
 
 ## Skills per role
 
@@ -91,10 +62,8 @@ checks `.agents/skills/<name>` inside this project first (managed by
   `mattpocock-skills/engineering/tdd` (resolves to `.agents/skills/tdd`),
   plus `superpowers/executing-plans` (from the `superpowers` plugin cache)
 * deep debugger gets `caveman/caveman` plus
-  `superpowers/systematic-debugging`; on this machine that skill resolves at
-  `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/systematic-debugging`,
-  so the role is fully READY here — re-check on any other machine before
-  assuming the same
+  `superpowers/systematic-debugging`; confirm this skill actually resolves
+  on the current machine before treating the role as READY there
 * code reviewer and security reviewer both get `caveman/caveman` plus
   `mattpocock-skills/engineering/code-review`
 * researcher primary and implementation worker get nothing at all, they run
@@ -113,8 +82,8 @@ always keeps `--disable-slash-commands` on.
 
 ## Running it
 
-Open Claude Code at the root of the checkout on `claude-sonnet-5` with high
-effort, then delegate from there.
+Open Claude Code at the root of the checkout as the orchestrator, then
+delegate from there.
 
 ```sh
 python3 tools/agents/delegate.py --agent codebase-explorer --prompt-file /tmp/tarefa.txt
@@ -138,9 +107,9 @@ status, response and exit_code. A PASS in that envelope just means the call
 executed cleanly, always go read the actual VERDICT the specialist wrote in
 its response. A timeout comes back as BLOCKED with exit code 124, a missing
 CLI comes back as BLOCKED with exit code 127, and a permission denial, a
-spent budget or a missing skill all come back as BLOCKED too. A model that
-answers under a different identity than what was requested (say Opus
-responding as if it were Astra) comes back as FAIL.
+spent budget or a missing skill all come back as BLOCKED too. A role that
+answers under a different identity than what was requested comes back as
+FAIL.
 
 ## Permissions and concurrency
 
@@ -165,37 +134,13 @@ Same working tree plus multiple writers is prohibited, full stop.
 python3 tools/agents/delegate.py --agent orchestrator --smoke < /dev/null   # should come back BLOCKED
 ```
 
-A real smoke test per role (this spends real provider budget/quota, run
-each one once, never in a loop)
-
-Results on September 28 2026: task manager, researcher deep, codebase
-explorer, deep debugger, security reviewer, verifier, implementation worker
-and docs mechanical all PASS with the requested model reported back (Codex
-and AGY do not report a model id, so `reported_model` is null there);
-researcher primary PASS on retry, see Troubleshooting.
-
-* task manager, prompt "Act as the task manager. Return exactly: TASK_MANAGER_OK"
-* planner, prompt "Act as the planner. Return exactly: PLANNER_OK"
-* researcher primary, prompt "Act as the researcher. Return exactly:
-  RESEARCHER_OK" — PASS on September 28 2026
-* researcher deep, prompt "Act as the researcher. Return exactly:
-  RESEARCHER_OK"
-* codebase explorer, prompt "Act as the codebase explorer. Return exactly:
-  EXPLORER_OK"
-* implementer, prompt "Identify yourself as the implementation agent. Do
-  not modify files. Return exactly: IMPLEMENTER_OK"
-* implementation worker, prompt "Identify yourself as the implementation
-  agent. Do not modify files. Return exactly: IMPLEMENTER_OK" — PASS on
-  September 28 2026
-* deep debugger, prompt "Act as the deep debugger. Return exactly:
-  DEBUGGER_OK"
-* code reviewer, prompt "Act as the code reviewer. Return exactly:
-  CODE_REVIEWER_OK"
-* security reviewer, prompt "Act as the security reviewer. Return exactly:
-  SECURITY_REVIEWER_OK"
-* verifier, prompt "Act as the verifier. Return exactly: VERIFIER_OK"
-* docs mechanical, prompt "Act as the docs/mechanical agent. Do not modify
-  files. Return exactly: DOCS_OK"
+A real smoke test per role spends real provider budget/quota — run each one
+once, never in a loop. Every role's prompt just asks it to identify itself
+and echo a fixed token (for example, "Act as the code reviewer. Return
+exactly: CODE_REVIEWER_OK"); a role that can edit files gets told not to.
+Keep the last smoke-test run's date and outcome per role in your own notes
+or task log rather than baking it into this file, since it goes stale the
+moment the roster or the machine changes.
 
 ## Troubleshooting and known limits
 
@@ -207,18 +152,14 @@ researcher primary PASS on retry, see Troubleshooting.
 * The Claude CLI retries on its own when it hits a 429 before giving up
   (you will see `api_retry` events), that does not buy any credit, it just
   waits. The wrapper still classifies the final result as BLOCKED.
-* `agy` is installed on this machine (1.2.7, `~/.local/bin/agy`) and both
-  AGY roles passed their smoke test on September 28 2026, so Lane B is
-  validated here. Two caveats from that run: (1) the researcher primary
-  smoke came back FAIL once ("provider returned no usable response") while
-  seven roles ran in parallel and passed on a single sequential retry, so
-  do not fan out several AGY calls at once; (2) `agy` prints
-  `warning: --mode plan has no effect while slash command expansion is
-  disabled`, meaning the read-only guarantee for researcher primary rests
-  on `--sandbox` alone, not on `--mode plan`. If `agy` turns out to be
-  missing on some other machine, both roles come back BLOCKED with exit code
-  127 and the only sanctioned fallback is the implementer (Sonnet), never a
-  silent model swap.
+* Where `agy` is installed, do not fan out several AGY calls at once — a
+  transient failure has been observed under concurrent load, with a PASS
+  on a single sequential retry. `agy` also prints `warning: --mode plan
+  has no effect while slash command expansion is disabled`, meaning the
+  read-only guarantee for researcher primary rests on `--sandbox` alone,
+  not on `--mode plan`. If `agy` is missing on a given machine, both AGY
+  roles come back BLOCKED with exit code 127 and the only sanctioned
+  fallback is the implementer role, never a silent model swap.
 * The lock only coordinates calls that go through this wrapper, it does
   nothing for editors or CLIs invoked directly.
 * POSIX only.
