@@ -1,10 +1,8 @@
 {
-  "_comment": "Projeto Hermes. Comandos literais que o verifier pode executar via --test-suite. Sem operadores de shell nem wildcards; rodam a partir da raiz do repositorio com o venv do projeto (nao ha uv nesta maquina).",
+  "_comment": "Comandos literais que o verifier pode executar via --test-suite. Sem operadores de shell nem wildcards; rodam a partir da raiz do repositorio. Adapte ao seu projeto (exemplo real em examples/hermes/tools/agents/project.json). A chave 'agents' cobre a propria suite do harness.",
   "test_commands": {
     "agents": ".venv/bin/python -m pytest tests/test_agent_delegation.py -q",
-    "audit": ".venv/bin/python -m pytest tests/test_audit_e2e.py tests/test_status_progress.py -q",
-    "parametrizacao": ".venv/bin/python -m pytest tests/test_parametrizacao_conferencia.py tests/test_parametrizacao_exportacao.py tests/test_parametrizacao_importacao.py tests/test_parametrizacao_matching.py tests/test_parametrizacao_referencias.py tests/test_parametrizacao_revisao.py tests/test_parametrizacao_router.py tests/test_parametrizacao_template.py -q",
-    "unit": ".venv/bin/python -m pytest tests -q --ignore=tests/e2e",
+    "unit": ".venv/bin/python -m pytest tests -q",
     "lint": ".venv/bin/ruff check ."
   }
 }

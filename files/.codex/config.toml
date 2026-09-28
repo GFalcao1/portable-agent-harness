@@ -1,8 +1,7 @@
-# Projeto Hermes: o Codex NAO faz parte da matriz deste projeto.
-#
-# Os papeis que no harness de origem eram do Astra (planner e code-reviewer)
-# rodam aqui em Claude Fable 5.1 via Claude Code CLI, spawnados pelo wrapper
-# tools/agents/delegate.py com modelo e effort travados no argv. Nao pine
-# modelo aqui: a unica fonte de verdade e tools/agents/agents.json.
-#
-# O orchestrator e a sessao Claude Code aberta na raiz do projeto.
+# Codex CLI faz parte da matriz: planner, code-reviewer e security-reviewer
+# rodam em gpt-6-astra via `codex exec`, spawnados por tools/agents/delegate.py
+# com modelo e effort travados no argv. NAO pine modelo aqui: a unica fonte de
+# verdade e tools/agents/agents.json. Este arquivo nao e instalado no projeto
+# (install.py o ignora); serve so como lembrete de que o Codex precisa estar
+# autenticado (`codex login`) e com o projeto marcado como trusted em
+# ~/.codex/config.toml ([projects."<caminho>"] trust_level = "trusted").

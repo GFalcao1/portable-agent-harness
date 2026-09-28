@@ -118,14 +118,14 @@ def test_multiline_task_is_treated_as_opaque_data(
     body = (
         "import sys, json\n"
         f"open({str(captured)!r}, 'w').write(sys.stdin.read())\n"
-        + _claude_success_body("claude-opus-5")
+        + _claude_success_body("claude-sonnet-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
     result, exit_code = _run_main(
         monkeypatch,
         capsys,
-        ["--agent", "researcher"],
+        ["--agent", "codebase-explorer"],
         stdin_text=injection_shaped,
     )
 
@@ -136,7 +136,7 @@ def test_multiline_task_is_treated_as_opaque_data(
     assert "TASK:" in sent
 
 
-def test_researcher_uses_exact_model_effort_and_readonly_tools(
+def test_researcher_deep_uses_exact_model_effort_and_readonly_tools(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
@@ -145,17 +145,17 @@ def test_researcher_uses_exact_model_effort_and_readonly_tools(
     body = (
         "import sys, json\n"
         f"open({str(argv_dump)!r}, 'w').write(json.dumps(sys.argv))\n"
-        + _claude_success_body("claude-opus-5")
+        + _claude_success_body("claude-fable-5-1")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher-deep"])
 
     assert exit_code == 0
     assert result["status"] == "PASS"
     argv = json.loads(argv_dump.read_text(encoding="utf-8"))
-    assert argv[argv.index("--model") + 1] == "claude-opus-5"
-    assert argv[argv.index("--effort") + 1] == "low"
+    assert argv[argv.index("--model") + 1] == "claude-fable-5-1"
+    assert argv[argv.index("--effort") + 1] == "medium"
     expected_tools = {"Read", "Glob", "Grep", "WebSearch", "WebFetch"}
     tools = argv[argv.index("--tools") + 1]
     assert set(tools.split(",")) == expected_tools
@@ -164,7 +164,33 @@ def test_researcher_uses_exact_model_effort_and_readonly_tools(
     assert argv[argv.index("--permission-mode") + 1] == "dontAsk"
 
 
-def test_agy_bulk_writer_receives_no_effort_flag(
+def test_researcher_primary_runs_agy_in_plan_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    fake_bin: Path,
+) -> None:
+    argv_dump = fake_bin.parent / "argv.json"
+    body = (
+        "import sys, json\n"
+        f"open({str(argv_dump)!r}, 'w').write(json.dumps(sys.argv))\n"
+        "print(json.dumps({'conversation_id': 'c1', 'status': 'SUCCESS', "
+        "'response': 'RESEARCH_OK\\n', 'duration_seconds': 1.0, "
+        "'num_turns': 1, 'usage': {}}))\n"
+    )
+    _write_fake_cli(fake_bin / "agy", body)
+
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher-primary"])
+
+    assert exit_code == 0
+    assert result["status"] == "PASS"
+    argv = json.loads(argv_dump.read_text(encoding="utf-8"))
+    assert argv[argv.index("--model") + 1] == "gemini-3.8-flash-high"
+    assert argv[argv.index("--mode") + 1] == "plan"
+    assert "--sandbox" in argv
+    assert "--effort" not in argv
+
+
+def test_agy_implementation_worker_receives_no_effort_flag(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
@@ -179,14 +205,14 @@ def test_agy_bulk_writer_receives_no_effort_flag(
     )
     _write_fake_cli(fake_bin / "agy", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer-bulk"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementation-worker"])
 
     assert exit_code == 0
     assert result["status"] == "PASS"
     assert result["reported_model"] is None
     argv = json.loads(argv_dump.read_text(encoding="utf-8"))
     assert "--effort" not in argv
-    assert argv[argv.index("--model") + 1] == "gemini-3.1-pro-high"
+    assert argv[argv.index("--model") + 1] == "gemini-3.8-flash-medium"
 
 
 def test_implementer_smoke_mode_grants_no_tools(
@@ -223,7 +249,7 @@ def test_verifier_test_suite_scopes_bash_to_exact_command(
     body = (
         "import sys, json\n"
         f"open({str(argv_dump)!r}, 'w').write(json.dumps(sys.argv))\n"
-        + _claude_success_body("claude-opus-5")
+        + _claude_success_body("claude-sonnet-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -250,7 +276,7 @@ def test_test_suite_rejected_for_non_verifier_agents(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit):
-        delegate.main(["--agent", "implementer", "--test-suite", "audit"])
+        delegate.main(["--agent", "implementer", "--test-suite", "unit"])
 
 
 def test_permission_denials_are_normalized_to_blocked(
@@ -269,7 +295,7 @@ def test_permission_denials_are_normalized_to_blocked(
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "BLOCKED"
     assert exit_code == 1
@@ -291,7 +317,7 @@ def test_missing_or_malformed_stream_is_never_pass(
 ) -> None:
     _write_fake_cli(fake_bin / "claude", f"import sys\n{body}")
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] in {"FAIL", "BLOCKED"}
     assert exit_code == 1
@@ -304,7 +330,7 @@ def test_mismatched_assistant_model_fails(
 ) -> None:
     _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-opus-4"))
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "FAIL"
     assert exit_code == 1
@@ -318,7 +344,7 @@ def test_nonzero_child_exit_code_is_preserved(
     body = _claude_success_body("claude-opus-5") + "sys.exit(7)\n"
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["exit_code"] == 7
     assert result["status"] == "FAIL"
@@ -333,7 +359,7 @@ def test_missing_executable_is_blocked_with_127(
 ) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "BLOCKED"
     assert result["exit_code"] == 127
@@ -355,7 +381,7 @@ def test_timeout_kills_the_process_group_and_reports_124(
     result, exit_code = _run_main(
         monkeypatch,
         capsys,
-        ["--agent", "researcher", "--timeout", "0.3"],
+        ["--agent", "codebase-explorer", "--timeout", "0.3"],
     )
 
     assert result["status"] == "BLOCKED"
@@ -368,7 +394,7 @@ def test_invalid_timeout_values_are_rejected(
 ) -> None:
     for bad in ("0", "-1", "inf", "nan"):
         with pytest.raises(SystemExit):
-            delegate.main(["--agent", "researcher", "--timeout", bad])
+            delegate.main(["--agent", "codebase-explorer", "--timeout", bad])
 
 
 def test_concurrent_implementer_invocations_are_serialized(
@@ -413,12 +439,12 @@ def test_shell_metacharacters_in_prompt_remain_literal_data(
     body = (
         "import sys\n"
         f"open({str(captured)!r}, 'w').write(sys.stdin.read())\n"
-        + _claude_success_body("claude-opus-5")
+        + _claude_success_body("claude-sonnet-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
     result, exit_code = _run_main(
-        monkeypatch, capsys, ["--agent", "researcher"], stdin_text=dangerous
+        monkeypatch, capsys, ["--agent", "codebase-explorer"], stdin_text=dangerous
     )
 
     assert result["status"] == "PASS"
@@ -437,14 +463,14 @@ def test_child_cwd_is_repo_root_regardless_of_invocation_directory(
     body = (
         "import os\n"
         f"open({str(cwd_file)!r}, 'w').write(os.getcwd())\n"
-        + _claude_success_body("claude-opus-5")
+        + _claude_success_body("claude-sonnet-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
     other_dir = tmp_path / "elsewhere"
     other_dir.mkdir()
     monkeypatch.chdir(other_dir)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert exit_code == 0
     assert result["status"] == "PASS"
@@ -467,7 +493,7 @@ def test_timeout_kills_descendant_processes_too(
     _write_fake_cli(fake_bin / "claude", body)
 
     result, exit_code = _run_main(
-        monkeypatch, capsys, ["--agent", "researcher", "--timeout", "0.5"]
+        monkeypatch, capsys, ["--agent", "codebase-explorer", "--timeout", "0.5"]
     )
 
     assert result["status"] == "BLOCKED"
@@ -491,7 +517,7 @@ def test_claude_duplicate_result_events_fail(
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "FAIL"
     assert exit_code == 1
@@ -504,7 +530,7 @@ def test_claude_non_object_json_line_fails(
 ) -> None:
     _write_fake_cli(fake_bin / "claude", "print('null')\n")
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "FAIL"
     assert exit_code == 1
@@ -531,7 +557,7 @@ def test_claude_mismatched_system_init_model_fails(
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "FAIL"
     assert exit_code == 1
@@ -549,7 +575,7 @@ def test_claude_auth_error_event_is_blocked_without_leaking_secrets(
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "BLOCKED"
     assert "sk-secret-xyz" not in result["response"]
@@ -561,9 +587,9 @@ def test_claude_duration_is_reported_in_seconds(
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
 ) -> None:
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-opus-5"))
+    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5"))
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert exit_code == 0
     assert result["duration"] == 0.012
@@ -586,7 +612,7 @@ def test_agy_print_timeout_uses_fractional_seconds(
 
     # Allow interpreter startup while still detecting fractional truncation.
     result, exit_code = _run_main(
-        monkeypatch, capsys, ["--agent", "implementer-bulk", "--timeout", "5.25"]
+        monkeypatch, capsys, ["--agent", "implementation-worker", "--timeout", "5.25"]
     )
 
     assert exit_code == 0
@@ -612,7 +638,7 @@ def test_agy_rejects_non_object_payloads(
 ) -> None:
     _write_fake_cli(fake_bin / "agy", stdout_body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer-bulk"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementation-worker"])
 
     assert result["status"] == "FAIL"
     assert result["response"]
@@ -632,7 +658,7 @@ def test_agy_empty_response_with_success_status_fails(
     )
     _write_fake_cli(fake_bin / "agy", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer-bulk"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementation-worker"])
 
     assert result["status"] == "FAIL"
     assert exit_code == 1
@@ -651,7 +677,7 @@ def test_agy_status_failure_fails_even_with_zero_exit_code(
     )
     _write_fake_cli(fake_bin / "agy", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer-bulk"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementation-worker"])
 
     assert result["status"] == "FAIL"
     assert exit_code == 1
@@ -670,7 +696,7 @@ def test_agy_model_mismatch_fails_even_with_success_status(
     )
     _write_fake_cli(fake_bin / "agy", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer-bulk"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementation-worker"])
 
     assert result["status"] == "FAIL"
     assert exit_code == 1
@@ -710,7 +736,7 @@ def test_agy_does_not_receive_claude_env_var(
     )
     _write_fake_cli(fake_bin / "agy", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer-bulk"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementation-worker"])
 
     assert exit_code == 0
     assert result["status"] == "PASS"
@@ -725,21 +751,33 @@ def test_roster_matches_the_approved_matrix() -> None:
     agents = delegate.load_agents()
     assert set(agents) == {
         "orchestrator",
-        "researcher",
+        "task-manager",
         "planner",
+        "researcher-primary",
+        "researcher-deep",
+        "codebase-explorer",
         "implementer",
-        "implementer-bulk",
+        "implementation-worker",
+        "deep-debugger",
         "code-reviewer",
+        "security-reviewer",
         "verifier",
+        "docs-mechanical",
     }
     expected = {
         "orchestrator": ("claude-sonnet-5", "high", "Claude Code parent"),
-        "researcher": ("claude-opus-5", "low", "Claude Code CLI"),
-        "planner": ("claude-fable-5-1", "medium", "Claude Code CLI"),
+        "task-manager": ("claude-opus-5-5", "high", "Claude Code CLI"),
+        "planner": ("gpt-6-astra", "medium", "Codex CLI"),
+        "researcher-primary": ("gemini-3.8-flash-high", None, "AGY"),
+        "researcher-deep": ("claude-fable-5-1", "medium", "Claude Code CLI"),
+        "codebase-explorer": ("claude-sonnet-5", "medium", "Claude Code CLI"),
         "implementer": ("claude-sonnet-5", "medium", "Claude Code CLI"),
-        "implementer-bulk": ("gemini-3.1-pro-high", None, "AGY"),
-        "code-reviewer": ("claude-fable-5-1", "high", "Claude Code CLI"),
-        "verifier": ("claude-opus-5", "high", "Claude Code CLI"),
+        "implementation-worker": ("gemini-3.8-flash-medium", None, "AGY"),
+        "deep-debugger": ("claude-opus-5-5", "high", "Claude Code CLI"),
+        "code-reviewer": ("gpt-6-astra", "medium", "Codex CLI"),
+        "security-reviewer": ("gpt-6-astra", "medium", "Codex CLI"),
+        "verifier": ("claude-sonnet-5", "medium", "Claude Code CLI"),
+        "docs-mechanical": ("claude-sonnet-5", "low", "Claude Code CLI"),
     }
     for role, (model, effort, provider) in expected.items():
         assert agents[role]["model"] == model, role
@@ -755,16 +793,16 @@ def test_explicit_root_targets_another_checkout(monkeypatch, capsys, fake_bin, t
     dump = tmp_path / "cwd.txt"
     _write_fake_cli(fake_bin / "claude", "import os\n"
                     f"open({str(dump)!r}, 'w').write(os.getcwd())\n"
-                    + _claude_success_body("claude-opus-5"))
+                    + _claude_success_body("claude-sonnet-5"))
     result, code = _run_main(monkeypatch, capsys,
-                             ["--agent", "researcher", "--root", str(target)])
+                             ["--agent", "codebase-explorer", "--root", str(target)])
     assert code == 0, result
     assert dump.read_text() == str(target)
 
 
 def test_invalid_root_never_launches_provider(monkeypatch, capsys, tmp_path):
     result, code = _run_main(monkeypatch, capsys,
-                             ["--agent", "researcher", "--root", str(tmp_path / "absent")])
+                             ["--agent", "codebase-explorer", "--root", str(tmp_path / "absent")])
     assert code == 1
     assert result["status"] == "BLOCKED"
     assert "root" in result["response"].lower()
@@ -780,9 +818,9 @@ def test_project_skill_used_without_global_cache(monkeypatch, tmp_path):
 
 def test_invalid_provider_is_blocked_before_spawn(monkeypatch, capsys):
     roster = delegate.load_agents()
-    roster["researcher"]["provider"] = "typo"
+    roster["codebase-explorer"]["provider"] = "typo"
     monkeypatch.setattr(delegate, "load_agents", lambda: roster)
-    result, code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
     assert code == 1
     assert result["status"] == "BLOCKED"
 
@@ -810,7 +848,7 @@ def test_project_test_suite_is_loaded(monkeypatch, capsys, fake_bin, tmp_path):
     dump = tmp_path / "argv.json"
     _write_fake_cli(fake_bin / "claude", "import sys, json\n"
                     f"open({str(dump)!r}, 'w').write(json.dumps(sys.argv))\n"
-                    + _claude_success_body("claude-opus-5"))
+                    + _claude_success_body("claude-sonnet-5"))
     result, code = _run_main(monkeypatch, capsys, ["--agent", "verifier", "--test-suite", "unit"])
     assert code == 0, result
     argv = json.loads(dump.read_text())
@@ -839,7 +877,7 @@ def test_claude_child_sees_only_the_skills_declared_for_its_role(
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
 ) -> None:
-    monkeypatch.setitem(delegate.ROLE_SKILLS, "researcher", ("mattpocock-skills/engineering/research",))
+    monkeypatch.setitem(delegate.ROLE_SKILLS, "codebase-explorer", ("mattpocock-skills/engineering/research",))
     cache = fake_bin.parent / "plugins"
     _fake_plugin_cache(
         cache,
@@ -860,11 +898,11 @@ def test_claude_child_sees_only_the_skills_declared_for_its_role(
         "    d = argv[argv.index('--plugin-dir') + 1]\n"
         "    payload['skills'] = sorted(os.listdir(os.path.join(d, 'skills')))\n"
         f"open({str(dump)!r}, 'w').write(json.dumps(payload))\n"
-        + _claude_success_body("claude-opus-5")
+        + _claude_success_body("claude-sonnet-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    _, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    _, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert exit_code == 0
     payload = json.loads(dump.read_text(encoding="utf-8"))
@@ -886,7 +924,7 @@ def test_verifier_gets_only_the_caveman_skill_in_its_plugin(
         "argv = sys.argv\n"
         "plugin = argv[argv.index('--plugin-dir') + 1]\n"
         f"open({str(dump)!r}, 'w').write(json.dumps(sorted(os.listdir(os.path.join(plugin, 'skills')))))\n"
-        + _claude_success_body("claude-opus-5")
+        + _claude_success_body("claude-sonnet-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -902,19 +940,19 @@ def test_a_declared_skill_missing_from_the_environment_is_blocked(
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
 ) -> None:
-    monkeypatch.setitem(delegate.ROLE_SKILLS, "researcher", ("mattpocock-skills/engineering/research",))
+    monkeypatch.setitem(delegate.ROLE_SKILLS, "codebase-explorer", ("mattpocock-skills/engineering/research",))
     empty = fake_bin.parent / "empty-plugins"
     empty.mkdir()
     monkeypatch.setattr(delegate, "PLUGIN_CACHE_ROOT", empty)
     # O wrapper resolve primeiro em <raiz>/.agents/skills; num projeto que ja
-    # tem a skill instalada localmente (caso do Hermes) o cenario "ausente" so
-    # existe com uma raiz vazia.
+    # tem a skill instalada localmente o cenario "ausente" so existe com uma
+    # raiz vazia.
     bare_root = fake_bin.parent / "bare-root"
     (bare_root / ".git").mkdir(parents=True)
     monkeypatch.setattr(delegate, "_REPO_ROOT", bare_root)
     _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-opus-5"))
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "BLOCKED"
     assert "skill not installed" in result["response"]
@@ -940,11 +978,11 @@ def test_token_budget_rules_reach_every_spawned_agent(
     body = (
         "import sys\n"
         f"open({str(dump)!r}, 'w').write(sys.stdin.read())\n"
-        + _claude_success_body("claude-opus-5").replace("sys.stdin.read()\n", "")
+        + _claude_success_body("claude-sonnet-5").replace("sys.stdin.read()\n", "")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    _, exit_code = _run_main(monkeypatch, capsys, ["--agent", "researcher"])
+    _, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert exit_code == 0
     prompt = dump.read_text(encoding="utf-8")
@@ -953,24 +991,10 @@ def test_token_budget_rules_reach_every_spawned_agent(
     # Read-only roles have no Write tool; they must summarise, not offload.
     assert "cannot write files" in prompt
     assert "artifacts/agents/" not in prompt
-    assert str(delegate.ROLE_OUTPUT_CEILING["researcher"]) in prompt
+    assert str(delegate.ROLE_OUTPUT_CEILING["codebase-explorer"]) in prompt
 
 
-# --- Provider Codex (adapter mantido; fora da matriz do Projeto Hermes) ---
-
-
-@pytest.fixture
-def codex_roster(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict[str, Any]]:
-    """Roster alternativo com planner e code-reviewer em Codex/gpt-6-astra.
-
-    A matriz do projeto usa Fable 5.1 nesses papeis; o adapter Codex continua
-    testado para que uma futura reativacao nao parta de codigo morto.
-    """
-    agents = delegate.load_agents()
-    for role in ("planner", "code-reviewer"):
-        agents[role] = dict(agents[role], provider="Codex CLI", model="gpt-6-astra")
-    monkeypatch.setattr(delegate, "load_agents", lambda: agents)
-    return agents
+# --- Provider Codex: planner, code-reviewer e security-reviewer rodam em Astra (gpt-6-astra) ---
 
 
 def _fake_codex_body(dump: Path, final: str = "CODEX REPORT") -> str:
@@ -992,7 +1016,6 @@ def test_codex_reviewer_pins_model_effort_and_readonly_sandbox(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
-    codex_roster: dict[str, dict[str, Any]],
 ) -> None:
     dump = fake_bin.parent / "argv.json"
     _write_fake_cli(fake_bin / "codex", _fake_codex_body(dump))
@@ -1005,7 +1028,30 @@ def test_codex_reviewer_pins_model_effort_and_readonly_sandbox(
     argv = json.loads(dump.read_text(encoding="utf-8"))
     assert argv[1] == "exec"
     assert argv[argv.index("--model") + 1] == "gpt-6-astra"
-    assert "model_reasoning_effort=high" in argv
+    assert "model_reasoning_effort=medium" in argv
+    assert argv[argv.index("--sandbox") + 1] == "read-only"
+    assert "--ephemeral" in argv
+    assert "--json" in argv
+
+
+@requires_posix
+def test_codex_security_reviewer_pins_model_effort_and_readonly_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    fake_bin: Path,
+) -> None:
+    dump = fake_bin.parent / "argv.json"
+    _write_fake_cli(fake_bin / "codex", _fake_codex_body(dump, "SECURITY REPORT"))
+
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "security-reviewer"])
+
+    assert exit_code == 0
+    assert result["status"] == "PASS"
+    assert result["response"] == "SECURITY REPORT"
+    argv = json.loads(dump.read_text(encoding="utf-8"))
+    assert argv[1] == "exec"
+    assert argv[argv.index("--model") + 1] == "gpt-6-astra"
+    assert "model_reasoning_effort=medium" in argv
     assert argv[argv.index("--sandbox") + 1] == "read-only"
     assert "--ephemeral" in argv
     assert "--json" in argv
@@ -1016,7 +1062,6 @@ def test_codex_planner_uses_medium_effort(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
-    codex_roster: dict[str, dict[str, Any]],
 ) -> None:
     dump = fake_bin.parent / "argv.json"
     _write_fake_cli(fake_bin / "codex", _fake_codex_body(dump, "PLAN"))
@@ -1034,7 +1079,6 @@ def test_codex_usage_limit_is_blocked_not_passed(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
-    codex_roster: dict[str, dict[str, Any]],
 ) -> None:
     body = (
         "import sys, json\n"
@@ -1059,7 +1103,6 @@ def test_codex_missing_final_message_never_passes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
-    codex_roster: dict[str, dict[str, Any]],
 ) -> None:
     body = (
         "import sys, json\n"
@@ -1079,7 +1122,6 @@ def test_codex_reported_model_mismatch_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
-    codex_roster: dict[str, dict[str, Any]],
 ) -> None:
     dump = fake_bin.parent / "argv.json"
     body = _fake_codex_body(dump).replace(
@@ -1095,11 +1137,38 @@ def test_codex_reported_model_mismatch_fails(
     assert exit_code == 1
 
 
+@requires_posix
+def test_codex_usage_is_reported_when_the_provider_supplies_it(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    fake_bin: Path,
+) -> None:
+    dump = fake_bin.parent / "argv.json"
+    body = _fake_codex_body(dump).replace(
+        "print(json.dumps({'type': 'turn.completed'}))",
+        "print(json.dumps({'type': 'turn.completed', "
+        "'usage': {'input_tokens': 120, 'output_tokens': 30}}))",
+    )
+    _write_fake_cli(fake_bin / "codex", body)
+
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "code-reviewer"])
+
+    assert exit_code == 0
+    assert result["usage"] == {"input_tokens": 120, "output_tokens": 30}
+
+
+def test_astra_roles_route_through_codex() -> None:
+    agents = delegate.load_agents()
+    for role in ("planner", "code-reviewer", "security-reviewer"):
+        assert agents[role]["model"] == "gpt-6-astra", role
+        assert agents[role]["provider"] == "Codex CLI", role
+
+
 # --- Isolamento de escrita com dois escritores ---
 
 
 @requires_posix
-def test_agy_bulk_writer_uses_accept_edits_without_terminal_sandbox(
+def test_agy_implementation_worker_uses_accept_edits_without_terminal_sandbox(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
@@ -1114,7 +1183,7 @@ def test_agy_bulk_writer_uses_accept_edits_without_terminal_sandbox(
     )
     _write_fake_cli(fake_bin / "agy", body)
 
-    _, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer-bulk"])
+    _, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementation-worker"])
 
     assert exit_code == 0
     argv = json.loads(dump.read_text(encoding="utf-8"))
@@ -1124,7 +1193,7 @@ def test_agy_bulk_writer_uses_accept_edits_without_terminal_sandbox(
 
 
 @requires_posix
-def test_bulk_writer_is_blocked_while_another_writer_holds_the_lock(
+def test_implementation_worker_is_blocked_while_another_writer_holds_the_lock(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
@@ -1145,7 +1214,7 @@ def test_bulk_writer_is_blocked_while_another_writer_holds_the_lock(
         delegate.fcntl.flock(holder, delegate.fcntl.LOCK_EX | delegate.fcntl.LOCK_NB)
 
         result, exit_code = _run_main(
-            monkeypatch, capsys, ["--agent", "implementer-bulk"]
+            monkeypatch, capsys, ["--agent", "implementation-worker"]
         )
 
         assert result["status"] == "BLOCKED"
@@ -1157,7 +1226,40 @@ def test_bulk_writer_is_blocked_while_another_writer_holds_the_lock(
 
 
 @requires_posix
-def test_bulk_writer_smoke_never_grants_edit_permissions(
+def test_docs_mechanical_is_blocked_while_another_writer_holds_the_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    fake_bin: Path,
+) -> None:
+    lock_dir = fake_bin.parent / "locks3"
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(lock_dir))
+    digest = delegate.hashlib.sha256(
+        str(delegate._REPO_ROOT).encode("utf-8")
+    ).hexdigest()[:16]
+    lock_dir.mkdir()
+    user_dir = lock_dir / f"agent-harness-{os.getuid()}"
+    user_dir.mkdir(mode=0o700)
+    lock_path = user_dir / f"{digest}.lock"
+    lock_path.touch()
+
+    holder = open(lock_path, "a+")  # noqa: SIM115
+    try:
+        delegate.fcntl.flock(holder, delegate.fcntl.LOCK_EX | delegate.fcntl.LOCK_NB)
+
+        result, exit_code = _run_main(
+            monkeypatch, capsys, ["--agent", "docs-mechanical", "--smoke"]
+        )
+
+        assert result["status"] == "BLOCKED"
+        assert "writer lock" in result["response"]
+        assert exit_code == 1
+    finally:
+        delegate.fcntl.flock(holder, delegate.fcntl.LOCK_UN)
+        holder.close()
+
+
+@requires_posix
+def test_implementation_worker_smoke_never_grants_edit_permissions(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
@@ -1173,7 +1275,7 @@ def test_bulk_writer_smoke_never_grants_edit_permissions(
     _write_fake_cli(fake_bin / "agy", body)
 
     _, exit_code = _run_main(
-        monkeypatch, capsys, ["--agent", "implementer-bulk", "--smoke"]
+        monkeypatch, capsys, ["--agent", "implementation-worker", "--smoke"]
     )
 
     assert exit_code == 0
@@ -1210,104 +1312,19 @@ def test_every_spawned_role_declares_an_output_ceiling() -> None:
     assert set(delegate.ROLE_OUTPUT_CEILING) == spawned
 
 
-@requires_posix
-def test_codex_usage_is_reported_when_the_provider_supplies_it(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    fake_bin: Path,
-    codex_roster: dict[str, dict[str, Any]],
-) -> None:
-    dump = fake_bin.parent / "argv.json"
-    body = _fake_codex_body(dump).replace(
-        "print(json.dumps({'type': 'turn.completed'}))",
-        "print(json.dumps({'type': 'turn.completed', "
-        "'usage': {'input_tokens': 120, 'output_tokens': 30}}))",
-    )
-    _write_fake_cli(fake_bin / "codex", body)
-
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "code-reviewer"])
-
-    assert exit_code == 0
-    assert result["usage"] == {"input_tokens": 120, "output_tokens": 30}
+def test_quota_markers_cover_documented_claude_code_messages() -> None:
+    for message in (
+        "Request rejected (429)",
+        "You've hit your spend limit",
+        "You've hit your usage limit.",
+        "Server is temporarily limiting requests due to rate limit",
+        "Extra usage is not enabled for this organization",
+    ):
+        assert delegate.is_quota_message(message) or "429" in message, message
+    assert not delegate.is_quota_message("done")
+    assert not delegate.is_quota_message(None)
 
 
-# --- Fable 5.1 nos papeis planner e code-reviewer (Projeto Hermes) ---
-
-
-def _argv_dumping_claude(dump: Path, model: str) -> str:
-    return (
-        "import sys, json\n"
-        f"open({str(dump)!r}, 'w').write(json.dumps(sys.argv))\n"
-        + _claude_success_body(model)
-    )
-
-
-@requires_posix
-@pytest.mark.parametrize(
-    ("agent", "effort"), [("planner", "medium"), ("code-reviewer", "high")]
-)
-def test_fable_roles_pin_model_effort_and_readonly_tools(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    fake_bin: Path,
-    agent: str,
-    effort: str,
-) -> None:
-    dump = fake_bin.parent / "argv.json"
-    _write_fake_cli(fake_bin / "claude", _argv_dumping_claude(dump, "claude-fable-5-1"))
-
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", agent])
-
-    assert exit_code == 0
-    assert result["status"] == "PASS"
-    assert result["model"] == "claude-fable-5-1"
-    argv = json.loads(dump.read_text(encoding="utf-8"))
-    assert Path(argv[0]).name == "claude"
-    assert argv[argv.index("--model") + 1] == "claude-fable-5-1"
-    assert argv[argv.index("--effort") + 1] == effort
-    assert argv[argv.index("--permission-mode") + 1] == "dontAsk"
-    tools = set(argv[argv.index("--tools") + 1].split(","))
-    assert tools == {"Read", "Glob", "Grep"}
-    assert "Bash" not in argv[argv.index("--allowedTools") + 1]
-    assert "--restricted" in argv
-    assert "--no-session-persistence" in argv
-
-
-def test_fable_roles_declare_admin_limit_budget() -> None:
-    agents = delegate.load_agents()
-    for role in ("planner", "code-reviewer"):
-        assert agents[role]["model"] == "claude-fable-5-1", role
-        assert agents[role]["budget"] == "admin-limit-only", role
-        assert "uso extra" in agents[role]["reason"], role
-
-
-@requires_posix
-def test_fable_answering_with_another_model_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    fake_bin: Path,
-) -> None:
-    # Sem substituicao silenciosa: se o provider servir Opus no lugar do Fable, FAIL.
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-opus-5"))
-
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "code-reviewer"])
-
-    assert result["status"] == "FAIL"
-    assert result["reported_model"] == "claude-opus-5"
-    assert exit_code == 1
-
-
-def _claude_error_event_body(event: dict[str, Any]) -> str:
-    return (
-        "import json, sys\n"
-        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-fable-5-1'}))\n"
-        f"print(json.dumps({event!r}))\n"
-        "sys.stdin.read()\n"
-        "sys.exit(1)\n"
-    )
-
-
-@requires_posix
 @pytest.mark.parametrize(
     "event",
     [
@@ -1323,9 +1340,16 @@ def test_claude_usage_limit_error_event_is_blocked_not_failed(
     fake_bin: Path,
     event: dict[str, Any],
 ) -> None:
-    _write_fake_cli(fake_bin / "claude", _claude_error_event_body(event))
+    body = (
+        "import json, sys\n"
+        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5'}))\n"
+        f"print(json.dumps({event!r}))\n"
+        "sys.stdin.read()\n"
+        "sys.exit(1)\n"
+    )
+    _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "code-reviewer"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "BLOCKED"
     assert "usage-limit" in result["response"] or "usage limit" in result["response"]
@@ -1340,7 +1364,7 @@ def test_claude_usage_limit_in_error_result_is_blocked(
 ) -> None:
     body = (
         "import json, sys\n"
-        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-fable-5-1'}))\n"
+        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5'}))\n"
         "print(json.dumps({'type': 'result', 'is_error': True, 'subtype': 'error_during_execution',\n"
         "    'result': \"You've hit your usage limit. Resets at 15:00.\", 'permission_denials': []}))\n"
         "sys.stdin.read()\n"
@@ -1348,7 +1372,7 @@ def test_claude_usage_limit_in_error_result_is_blocked(
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "planner"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "BLOCKED"
     assert "usage limit" in result["response"]
@@ -1363,7 +1387,7 @@ def test_claude_429_retries_without_final_result_are_blocked(
 ) -> None:
     body = (
         "import json, sys\n"
-        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-fable-5-1'}))\n"
+        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5'}))\n"
         "print(json.dumps({'type': 'system', 'subtype': 'api_retry', 'error_status': 429,\n"
         "    'error': 'rate_limit', 'attempt': 1, 'max_retries': 3}))\n"
         "sys.stdin.read()\n"
@@ -1371,24 +1395,11 @@ def test_claude_429_retries_without_final_result_are_blocked(
     )
     _write_fake_cli(fake_bin / "claude", body)
 
-    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "code-reviewer"])
+    result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
     assert result["status"] == "BLOCKED"
     assert "429" in result["response"]
     assert exit_code == 1
-
-
-def test_quota_markers_cover_documented_claude_code_messages() -> None:
-    for message in (
-        "Request rejected (429)",
-        "You've hit your spend limit",
-        "You've hit your usage limit.",
-        "Server is temporarily limiting requests due to rate limit",
-        "Extra usage is not enabled for this organization",
-    ):
-        assert delegate.is_quota_message(message) or "429" in message, message
-    assert not delegate.is_quota_message("done")
-    assert not delegate.is_quota_message(None)
 
 
 def test_skill_resolves_from_project_claude_skills_dir(monkeypatch, tmp_path) -> None:

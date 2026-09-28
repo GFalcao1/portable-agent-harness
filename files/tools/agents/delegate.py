@@ -33,38 +33,62 @@ _AGENTS_JSON = _HERE.parent / "agents.json"
 _REPO_ROOT = _HERE.parents[2]
 
 ROLE_TOOLS: dict[str, list[str]] = {
-    "researcher": ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
+    "task-manager": ["Read", "Glob", "Grep"],
+    "researcher-deep": ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
+    "codebase-explorer": ["Read", "Glob", "Grep"],
     "implementer": ["Read", "Glob", "Grep", "Edit", "Write"],
+    "deep-debugger": ["Read", "Glob", "Grep"],
     "verifier": ["Read", "Glob", "Grep"],
-    "planner": ["Read", "Glob", "Grep"],
-    "code-reviewer": ["Read", "Glob", "Grep"],
-    "implementer-bulk": ["Read", "Glob", "Grep", "Edit", "Write"],
+    "docs-mechanical": ["Read", "Glob", "Grep", "Edit", "Write"],
 }
 PERMISSION_MODES: dict[str, str] = {
-    "researcher": "dontAsk",
+    "task-manager": "dontAsk",
+    "researcher-deep": "dontAsk",
+    "codebase-explorer": "dontAsk",
     "implementer": "acceptEdits",
+    "deep-debugger": "dontAsk",
     "verifier": "dontAsk",
-    "planner": "dontAsk",
-    "code-reviewer": "dontAsk",
-    "implementer-bulk": "acceptEdits",
+    "docs-mechanical": "acceptEdits",
 }
-# Both spawned writers share one lock; two writers in one tree is prohibited.
-WRITER_ROLES: frozenset[str] = frozenset({"implementer", "implementer-bulk"})
+# All three spawned writers share one lock; two writers in one tree is prohibited.
+WRITER_ROLES: frozenset[str] = frozenset(
+    {"implementer", "implementation-worker", "docs-mechanical"}
+)
 # Each role sees exactly these upstream skills, linked into an ephemeral
 # plugin. Linking single skills excludes third-party plugin hooks by
 # construction. A declared skill missing from the environment is BLOCKED.
 # "caveman/caveman" em todo papel Claude: saida terse, mesma precisao tecnica
 # (economia de tokens e regra do projeto). Resolve em .claude/skills/caveman.
 ROLE_SKILLS: dict[str, tuple[str, ...]] = {
-    "researcher": ("caveman/caveman",),
-    "planner": ("caveman/caveman",),
+    "task-manager": ("caveman/caveman",),
+    "planner": (
+        "caveman/caveman",
+        "superpowers/writing-plans",
+    ),
+    "researcher-deep": ("caveman/caveman",),
+    "codebase-explorer": ("caveman/caveman",),
     "implementer": (
         "caveman/caveman",
         "mattpocock-skills/engineering/tdd",
         "superpowers/executing-plans",
     ),
-    "code-reviewer": ("caveman/caveman",),
+    "deep-debugger": (
+        "caveman/caveman",
+        "superpowers/systematic-debugging",
+    ),
+    "code-reviewer": (
+        "caveman/caveman",
+        "mattpocock-skills/engineering/code-review",
+    ),
+    "security-reviewer": (
+        "caveman/caveman",
+        "mattpocock-skills/engineering/code-review",
+    ),
     "verifier": ("caveman/caveman",),
+    "docs-mechanical": ("caveman/caveman",),
+    # researcher-primary and implementation-worker run through AGY: no
+    # skills, --disable-slash-commands keeps task data from expanding into
+    # commands.
 }
 PLUGIN_CACHE_ROOT = (
     Path.home() / ".claude" / "plugins" / "cache" / "claude-plugins-official"
@@ -83,12 +107,18 @@ EXIT_TIMEOUT = 124
 
 # Output ceiling per spawned role, in lines of final report.
 ROLE_OUTPUT_CEILING: dict[str, int] = {
-    "researcher": 60,
+    "task-manager": 200,
     "planner": 200,
+    "researcher-primary": 60,
+    "researcher-deep": 80,
+    "codebase-explorer": 60,
     "implementer": 80,
-    "implementer-bulk": 80,
+    "implementation-worker": 80,
+    "deep-debugger": 80,
     "code-reviewer": 40,
+    "security-reviewer": 40,
     "verifier": 40,
+    "docs-mechanical": 60,
 }
 
 
@@ -119,9 +149,11 @@ def token_budget_clause(agent: str) -> str:
 
 
 ROLE_PROMPT_TEMPLATE = (
-    "You are the '{agent}' agent in a fixed seven-role delegation boundary "
-    "(orchestrator, researcher, planner, implementer, implementer-bulk, "
-    "code-reviewer, verifier). Your mode for this invocation is '{mode}'. "
+    "You are the '{agent}' agent in a fixed thirteen-role delegation "
+    "boundary (orchestrator, task-manager, planner, researcher-primary, "
+    "researcher-deep, codebase-explorer, implementer, implementation-worker, "
+    "deep-debugger, code-reviewer, security-reviewer, verifier, "
+    "docs-mechanical). Your mode for this invocation is '{mode}'. "
     "Operate strictly within that mode and the tools granted to you. Do "
     "not invoke, spawn, or delegate to any other agent, agent CLI, or "
     "sub-delegation under any circumstances; there is no sub-delegation in "
@@ -383,8 +415,9 @@ def _claude_parse_error(
 
 
 # Limite de uso atingido e BLOCKED, nunca FAIL nem troca de modelo. Os papeis
-# Fable 5.1 consomem apenas o limite/saldo definido pelo administrador; o
-# wrapper nunca solicita nem aceita uso extra alem desse limite.
+# Astra (gpt-6-astra via Codex CLI) consomem apenas o limite/saldo da conta
+# ChatGPT/Codex vinculada; o wrapper nunca solicita nem aceita uso extra alem
+# desse limite.
 QUOTA_MARKERS: tuple[str, ...] = (
     "usage limit",
     "rate limit",
