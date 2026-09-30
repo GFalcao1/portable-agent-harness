@@ -41,11 +41,11 @@ em `.harness/manifest.json` para reinstalar/atualizar de forma idempotente.
 | `tools/agents/agents.json` | Roster fixo e **fonte única** de modelo, effort, provider, modo e status por papel |
 | `tools/agents/delegate.py` | Wrapper que spawna cada papel e registra o uso em `.harness/usage.jsonl` |
 | `tools/agents/usage_report.py` | Relatório de custo/tokens/status/duração por papel a partir do `usage.jsonl` |
-| `tools/agents/project.json` | Comandos literais que o verifier pode executar (**adapte**) |
+| `tools/agents/project.json` | Comandos literais que o verifier pode executar (**adapte**; seed: criado só se faltar, reinstalar preserva) |
 | `tools/agents/README.md` | Operação, permissões, concorrência, limites conhecidos |
 | `tests/` | Testes herméticos do wrapper (+ teste ao vivo opcional de isolamento de contexto) |
 | `docs/agent-workflow.md` | Design writeup e histórico de emendas |
-| `task/COMPLEXIDADE.md` | Gate de complexidade que decide a lane (**adapte**) |
+| `task/COMPLEXIDADE.md` | Gate de complexidade que decide a lane (**adapte**; seed: criado só se faltar, reinstalar preserva) |
 
 `files/.codex/config.toml` não é instalado; é só lembrete de configuração do Codex.
 

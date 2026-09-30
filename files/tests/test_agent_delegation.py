@@ -269,10 +269,14 @@ def test_verifier_test_suite_scopes_bash_to_exact_command(
     assert set(tools) == {"Read", "Glob", "Grep", "Bash"}
     allowed = argv[argv.index("--allowedTools") + 1].split(",")
     assert "Bash" not in allowed
-    assert "Bash(python3 -m pytest tests/test_agent_delegation.py -q)" in allowed
-    assert set(allowed) - {
-        "Bash(python3 -m pytest tests/test_agent_delegation.py -q)"
-    } == {"Read", "Glob", "Grep"}
+    # project.json é seed adaptado por projeto: o comando esperado vem dele.
+    project = json.loads(
+        (Path(__file__).resolve().parents[1] / "tools" / "agents" / "project.json")
+        .read_text(encoding="utf-8")
+    )
+    expected_bash = f"Bash({project['test_commands']['agents']})"
+    assert expected_bash in allowed
+    assert set(allowed) - {expected_bash} == {"Read", "Glob", "Grep"}
 
 
 def test_test_suite_rejected_for_non_verifier_agents(
