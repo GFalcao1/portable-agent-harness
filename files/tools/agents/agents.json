@@ -1,8 +1,8 @@
 {
   "orchestrator": {
     "provider": "Claude Code parent",
-    "requested_model": "Sonnet 5",
-    "model": "claude-sonnet-5",
+    "requested_model": "Sonnet 5.5",
+    "model": "claude-sonnet-5-5",
     "reasoning_effort": "high",
     "mode": "orchestrator",
     "status": "READY"
@@ -42,16 +42,16 @@
   },
   "codebase-explorer": {
     "provider": "Claude Code CLI",
-    "requested_model": "Sonnet 5",
-    "model": "claude-sonnet-5",
+    "requested_model": "Sonnet 5.5",
+    "model": "claude-sonnet-5-5",
     "reasoning_effort": "medium",
     "mode": "read-only",
     "status": "READY"
   },
   "implementer": {
     "provider": "Claude Code CLI",
-    "requested_model": "Sonnet 5",
-    "model": "claude-sonnet-5",
+    "requested_model": "Sonnet 5.5",
+    "model": "claude-sonnet-5-5",
     "reasoning_effort": "medium",
     "mode": "write",
     "status": "READY"
@@ -91,16 +91,16 @@
   },
   "verifier": {
     "provider": "Claude Code CLI",
-    "requested_model": "Sonnet 5",
-    "model": "claude-sonnet-5",
+    "requested_model": "Sonnet 5.5",
+    "model": "claude-sonnet-5-5",
     "reasoning_effort": "medium",
     "mode": "read-execute",
     "status": "READY"
   },
   "docs-mechanical": {
     "provider": "Claude Code CLI",
-    "requested_model": "Sonnet 5",
-    "model": "claude-sonnet-5",
+    "requested_model": "Sonnet 5.5",
+    "model": "claude-sonnet-5-5",
     "reasoning_effort": "low",
     "mode": "write",
     "status": "READY"

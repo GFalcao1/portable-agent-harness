@@ -22,7 +22,7 @@ def _record(**overrides: Any) -> dict[str, Any]:
         "ts": "2026-01-01T00:00:00+00:00",
         "agent": "codebase-explorer",
         "provider": "Claude Code CLI",
-        "model": "claude-sonnet-5",
+        "model": "claude-sonnet-5-5",
         "status": "PASS",
         "smoke": False,
         "duration_s": 1.0,

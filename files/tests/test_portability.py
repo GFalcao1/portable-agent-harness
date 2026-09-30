@@ -40,6 +40,8 @@ def test_builtin_canonical_test_commands_is_empty() -> None:
 
 
 def test_shipped_project_json_has_no_venv_assumption() -> None:
+    if not (_ROOT.parent / "install.py").is_file():
+        pytest.skip("fora do repo do harness: project.json é seed adaptado pelo projeto")
     config = json.loads(
         (_ROOT / "tools" / "agents" / "project.json").read_text(encoding="utf-8")
     )

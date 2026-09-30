@@ -321,3 +321,56 @@ def test_claude_instructions_can_target_local_file(tmp_path: Path) -> None:
     assert "/AGENTS.md" in exclude
     assert "/CLAUDE.md" not in exclude.replace("/CLAUDE.local.md", "")
     assert git("status", "--porcelain", cwd=target) == ""
+
+
+SEEDS = (Path("tools/agents/project.json"), Path("task/COMPLEXIDADE.md"))
+
+
+def test_seed_files_are_created_once_and_preserved_on_reinstall(tmp_path: Path) -> None:
+    target = tmp_path / "project"
+    target.mkdir()
+    run_install(target, (), "--no-skills")
+    for seed in SEEDS:
+        assert (target / seed).is_file()
+        (target / seed).write_text(f"adapted {seed.name}\n", encoding="utf-8")
+
+    result = run_install(target, (), "--no-skills", check=False)
+
+    assert result.returncode == 0, result.stderr
+    for seed in SEEDS:
+        assert (target / seed).read_text(encoding="utf-8") == f"adapted {seed.name}\n"
+    manifest = json.loads((target / ".harness" / "manifest.json").read_text())
+    assert not {s.as_posix() for s in SEEDS} & set(manifest["entries"])
+
+
+def test_preexisting_seed_files_do_not_collide(tmp_path: Path) -> None:
+    target = tmp_path / "project"
+    for seed in SEEDS:
+        (target / seed).parent.mkdir(parents=True, exist_ok=True)
+        (target / seed).write_text("project owned\n", encoding="utf-8")
+
+    result = run_install(target, (), "--no-skills", check=False)
+
+    assert result.returncode == 0, result.stderr
+    for seed in SEEDS:
+        assert (target / seed).read_text(encoding="utf-8") == "project owned\n"
+
+
+def test_legacy_manifest_seed_entries_are_neither_blocking_nor_deleted(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "project"
+    target.mkdir()
+    run_install(target, (), "--no-skills")
+    manifest_path = target / ".harness" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for seed in SEEDS:
+        manifest["entries"][seed.as_posix()] = {"type": "file", "sha256": "0" * 64}
+        (target / seed).write_text("adapted\n", encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest))
+
+    result = run_install(target, (), "--no-skills", check=False)
+
+    assert result.returncode == 0, result.stderr
+    for seed in SEEDS:
+        assert (target / seed).read_text(encoding="utf-8") == "adapted\n"

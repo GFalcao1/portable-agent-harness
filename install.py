@@ -21,6 +21,9 @@ EXCLUDE_BEGIN = "# portable-agent-harness:begin"
 EXCLUDE_END = "# portable-agent-harness:end"
 MANIFEST_PATH = Path(".harness/manifest.json")
 IGNORED_NAMES = {".DS_Store", "__pycache__"}
+# Arquivos que o projeto deve adaptar: criados só se faltarem, nunca
+# sobrescritos nem registrados no manifesto (reinstalar não os trava).
+SEED_PATHS = frozenset({Path("tools/agents/project.json"), Path("task/COMPLEXIDADE.md")})
 
 
 class InstallError(RuntimeError):
@@ -251,7 +254,7 @@ def preflight(
     for relative in regular:
         check_no_ancestor_symlinks(target, relative, allow_leaf=False)
         destination = target / relative
-        if not destination.exists():
+        if not destination.exists() or relative in SEED_PATHS:
             continue
         old = old_entries.get(relative.as_posix())
         if old is None:
@@ -275,7 +278,7 @@ def preflight(
         ):
             raise InstallError(f"collision or modified symlink at {relative.as_posix()}")
 
-    stale = {Path(path) for path in old_entries}.difference(desired_paths)
+    stale = {Path(path) for path in old_entries}.difference(desired_paths, SEED_PATHS)
     for relative in stale:
         check_no_ancestor_symlinks(target, relative, allow_leaf=True)
         destination = target / relative
@@ -395,6 +398,8 @@ def install(args: argparse.Namespace) -> None:
         if destination.is_symlink() or destination.exists():
             destination.unlink()
     for relative, (data, mode, _source) in sorted(regular.items(), key=lambda item: str(item[0])):
+        if relative in SEED_PATHS and (target / relative).exists():
+            continue
         atomic_write(target / relative, data, mode)
     for relative, link_target in sorted(links.items(), key=lambda item: str(item[0])):
         destination = target / relative
@@ -409,6 +414,8 @@ def install(args: argparse.Namespace) -> None:
 
     entries: dict[str, dict[str, str]] = {}
     for relative, (data, _mode, provenance) in regular.items():
+        if relative in SEED_PATHS:
+            continue
         entries[relative.as_posix()] = {
             "type": "file",
             "sha256": digest(data),
