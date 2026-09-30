@@ -117,7 +117,7 @@ def test_claude_pass_logs_tokens_cost_and_hashed_task(
     isolated_repo_root: Path,
 ) -> None:
     body = _claude_success_body(
-        "claude-sonnet-5",
+        "claude-sonnet-5-5",
         extra_result_fields=(
             "'usage': {'input_tokens': 100, 'output_tokens': 50, "
             "'cache_creation_input_tokens': 5, 'cache_read_input_tokens': 7}, "
@@ -142,7 +142,7 @@ def test_claude_pass_logs_tokens_cost_and_hashed_task(
     record = records[0]
     assert record["agent"] == "codebase-explorer"
     assert record["provider"] == "Claude Code CLI"
-    assert record["model"] == "claude-sonnet-5"
+    assert record["model"] == "claude-sonnet-5-5"
     assert record["status"] == "PASS"
     assert record["smoke"] is False
     assert record["exit_code"] == 0
@@ -247,7 +247,7 @@ def test_opt_out_env_var_disables_logging(
     fake_bin: Path,
     isolated_repo_root: Path,
 ) -> None:
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5"))
+    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5-5"))
     monkeypatch.setenv("HARNESS_USAGE_LOG", "0")
 
     result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
@@ -264,7 +264,7 @@ def test_unwritable_log_dir_does_not_change_verdict_or_exit_code(
     fake_bin: Path,
     isolated_repo_root: Path,
 ) -> None:
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5"))
+    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5-5"))
     log_dir = usage_log_path(isolated_repo_root).parent
     log_dir.mkdir(parents=True)
     log_dir.chmod(0o500)
@@ -291,7 +291,7 @@ def test_smoke_run_is_logged_with_smoke_true(
     fake_bin: Path,
     isolated_repo_root: Path,
 ) -> None:
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5"))
+    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5-5"))
 
     result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "implementer", "--smoke"])
 
@@ -354,7 +354,7 @@ def test_two_invocations_append_two_well_formed_lines(
     fake_bin: Path,
     isolated_repo_root: Path,
 ) -> None:
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5"))
+    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5-5"))
 
     _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"], stdin_text="first")
     _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"], stdin_text="second")

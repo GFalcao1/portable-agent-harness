@@ -103,7 +103,7 @@ def test_orchestrator_runs_as_parent_session_without_spawning_anything(
     result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "orchestrator"])
 
     assert result["status"] == "BLOCKED"
-    assert result["model"] == "claude-sonnet-5"
+    assert result["model"] == "claude-sonnet-5-5"
     assert result["reasoning_effort"] == "high"
     assert "parent Claude Code session" in result["response"]
     assert exit_code == 1
@@ -121,7 +121,7 @@ def test_multiline_task_is_treated_as_opaque_data(
     body = (
         "import sys, json\n"
         f"open({str(captured)!r}, 'w').write(sys.stdin.read())\n"
-        + _claude_success_body("claude-sonnet-5")
+        + _claude_success_body("claude-sonnet-5-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -227,7 +227,7 @@ def test_implementer_smoke_mode_grants_no_tools(
     body = (
         "import sys, json\n"
         f"open({str(argv_dump)!r}, 'w').write(json.dumps(sys.argv))\n"
-        + _claude_success_body("claude-sonnet-5")
+        + _claude_success_body("claude-sonnet-5-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -252,7 +252,7 @@ def test_verifier_test_suite_scopes_bash_to_exact_command(
     body = (
         "import sys, json\n"
         f"open({str(argv_dump)!r}, 'w').write(json.dumps(sys.argv))\n"
-        + _claude_success_body("claude-sonnet-5")
+        + _claude_success_body("claude-sonnet-5-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -348,7 +348,7 @@ def test_nonzero_child_exit_code_is_preserved(
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
 ) -> None:
-    body = _claude_success_body("claude-opus-5") + "sys.exit(7)\n"
+    body = _claude_success_body("claude-opus-5-5") + "sys.exit(7)\n"
     _write_fake_cli(fake_bin / "claude", body)
 
     result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
@@ -446,7 +446,7 @@ def test_shell_metacharacters_in_prompt_remain_literal_data(
     body = (
         "import sys\n"
         f"open({str(captured)!r}, 'w').write(sys.stdin.read())\n"
-        + _claude_success_body("claude-sonnet-5")
+        + _claude_success_body("claude-sonnet-5-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -470,7 +470,7 @@ def test_child_cwd_is_repo_root_regardless_of_invocation_directory(
     body = (
         "import os\n"
         f"open({str(cwd_file)!r}, 'w').write(os.getcwd())\n"
-        + _claude_success_body("claude-sonnet-5")
+        + _claude_success_body("claude-sonnet-5-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
     other_dir = tmp_path / "elsewhere"
@@ -517,7 +517,7 @@ def test_claude_duplicate_result_events_fail(
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
 ) -> None:
-    body = _claude_success_body("claude-opus-5") + (
+    body = _claude_success_body("claude-opus-5-5") + (
         "print(json.dumps({'type': 'result', 'is_error': False, "
         "'subtype': 'success', 'result': 'again', "
         "'permission_denials': []}))\n"
@@ -553,7 +553,7 @@ def test_claude_mismatched_system_init_model_fails(
         "print(json.dumps({'type': 'system', 'subtype': 'init', "
         "'model': 'claude-opus-4'}))\n"
         "print(json.dumps({'type': 'assistant', 'message': "
-        "{'model': 'claude-opus-5', 'content': 'ok'}}))\n"
+        "{'model': 'claude-opus-5-5', 'content': 'ok'}}))\n"
         "print(json.dumps({\n"
         "    'type': 'result', 'is_error': False, 'subtype': 'success',\n"
         "    'result': 'done', 'permission_denials': [], "
@@ -594,7 +594,7 @@ def test_claude_duration_is_reported_in_seconds(
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
 ) -> None:
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5"))
+    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-sonnet-5-5"))
 
     result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
@@ -772,19 +772,19 @@ def test_roster_matches_the_approved_matrix() -> None:
         "docs-mechanical",
     }
     expected = {
-        "orchestrator": ("claude-sonnet-5", "high", "Claude Code parent"),
+        "orchestrator": ("claude-sonnet-5-5", "high", "Claude Code parent"),
         "task-manager": ("claude-opus-5-5", "high", "Claude Code CLI"),
         "planner": ("gpt-6-astra", "medium", "Codex CLI"),
         "researcher-primary": ("gemini-3.8-flash-high", None, "AGY"),
         "researcher-deep": ("claude-fable-5-1", "medium", "Claude Code CLI"),
-        "codebase-explorer": ("claude-sonnet-5", "medium", "Claude Code CLI"),
-        "implementer": ("claude-sonnet-5", "medium", "Claude Code CLI"),
+        "codebase-explorer": ("claude-sonnet-5-5", "medium", "Claude Code CLI"),
+        "implementer": ("claude-sonnet-5-5", "medium", "Claude Code CLI"),
         "implementation-worker": ("gemini-3.8-flash-medium", None, "AGY"),
         "deep-debugger": ("claude-opus-5-5", "high", "Claude Code CLI"),
         "code-reviewer": ("gpt-6-astra", "medium", "Codex CLI"),
         "security-reviewer": ("gpt-6-astra", "medium", "Codex CLI"),
-        "verifier": ("claude-sonnet-5", "medium", "Claude Code CLI"),
-        "docs-mechanical": ("claude-sonnet-5", "low", "Claude Code CLI"),
+        "verifier": ("claude-sonnet-5-5", "medium", "Claude Code CLI"),
+        "docs-mechanical": ("claude-sonnet-5-5", "low", "Claude Code CLI"),
     }
     for role, (model, effort, provider) in expected.items():
         assert agents[role]["model"] == model, role
@@ -800,7 +800,7 @@ def test_explicit_root_targets_another_checkout(monkeypatch, capsys, fake_bin, t
     dump = tmp_path / "cwd.txt"
     _write_fake_cli(fake_bin / "claude", "import os\n"
                     f"open({str(dump)!r}, 'w').write(os.getcwd())\n"
-                    + _claude_success_body("claude-sonnet-5"))
+                    + _claude_success_body("claude-sonnet-5-5"))
     result, code = _run_main(monkeypatch, capsys,
                              ["--agent", "codebase-explorer", "--root", str(target)])
     assert code == 0, result
@@ -855,7 +855,7 @@ def test_project_test_suite_is_loaded(monkeypatch, capsys, fake_bin, tmp_path):
     dump = tmp_path / "argv.json"
     _write_fake_cli(fake_bin / "claude", "import sys, json\n"
                     f"open({str(dump)!r}, 'w').write(json.dumps(sys.argv))\n"
-                    + _claude_success_body("claude-sonnet-5"))
+                    + _claude_success_body("claude-sonnet-5-5"))
     result, code = _run_main(monkeypatch, capsys, ["--agent", "verifier", "--test-suite", "unit"])
     assert code == 0, result
     argv = json.loads(dump.read_text())
@@ -905,7 +905,7 @@ def test_claude_child_sees_only_the_skills_declared_for_its_role(
         "    d = argv[argv.index('--plugin-dir') + 1]\n"
         "    payload['skills'] = sorted(os.listdir(os.path.join(d, 'skills')))\n"
         f"open({str(dump)!r}, 'w').write(json.dumps(payload))\n"
-        + _claude_success_body("claude-sonnet-5")
+        + _claude_success_body("claude-sonnet-5-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -931,7 +931,7 @@ def test_verifier_gets_only_the_caveman_skill_in_its_plugin(
         "argv = sys.argv\n"
         "plugin = argv[argv.index('--plugin-dir') + 1]\n"
         f"open({str(dump)!r}, 'w').write(json.dumps(sorted(os.listdir(os.path.join(plugin, 'skills')))))\n"
-        + _claude_success_body("claude-sonnet-5")
+        + _claude_success_body("claude-sonnet-5-5")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -957,7 +957,7 @@ def test_a_declared_skill_missing_from_the_environment_is_blocked(
     bare_root = fake_bin.parent / "bare-root"
     (bare_root / ".git").mkdir(parents=True)
     monkeypatch.setattr(delegate, "_REPO_ROOT", bare_root)
-    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-opus-5"))
+    _write_fake_cli(fake_bin / "claude", _claude_success_body("claude-opus-5-5"))
 
     result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "codebase-explorer"])
 
@@ -985,7 +985,7 @@ def test_token_budget_rules_reach_every_spawned_agent(
     body = (
         "import sys\n"
         f"open({str(dump)!r}, 'w').write(sys.stdin.read())\n"
-        + _claude_success_body("claude-sonnet-5").replace("sys.stdin.read()\n", "")
+        + _claude_success_body("claude-sonnet-5-5").replace("sys.stdin.read()\n", "")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -1301,7 +1301,7 @@ def test_writer_roles_may_offload_long_output_to_a_file(
     body = (
         "import sys\n"
         f"open({str(dump)!r}, 'w').write(sys.stdin.read())\n"
-        + _claude_success_body("claude-sonnet-5").replace("sys.stdin.read()\n", "")
+        + _claude_success_body("claude-sonnet-5-5").replace("sys.stdin.read()\n", "")
     )
     _write_fake_cli(fake_bin / "claude", body)
 
@@ -1349,7 +1349,7 @@ def test_claude_usage_limit_error_event_is_blocked_not_failed(
 ) -> None:
     body = (
         "import json, sys\n"
-        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5'}))\n"
+        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5-5'}))\n"
         f"print(json.dumps({event!r}))\n"
         "sys.stdin.read()\n"
         "sys.exit(1)\n"
@@ -1371,7 +1371,7 @@ def test_claude_usage_limit_in_error_result_is_blocked(
 ) -> None:
     body = (
         "import json, sys\n"
-        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5'}))\n"
+        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5-5'}))\n"
         "print(json.dumps({'type': 'result', 'is_error': True, 'subtype': 'error_during_execution',\n"
         "    'result': \"You've hit your usage limit. Resets at 15:00.\", 'permission_denials': []}))\n"
         "sys.stdin.read()\n"
@@ -1394,7 +1394,7 @@ def test_claude_429_retries_without_final_result_are_blocked(
 ) -> None:
     body = (
         "import json, sys\n"
-        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5'}))\n"
+        "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'claude-opus-5-5'}))\n"
         "print(json.dumps({'type': 'system', 'subtype': 'api_retry', 'error_status': 429,\n"
         "    'error': 'rate_limit', 'attempt': 1, 'max_retries': 3}))\n"
         "sys.stdin.read()\n"
