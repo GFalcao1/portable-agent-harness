@@ -80,8 +80,8 @@ scripts direto do clone (`python3 install.py`, `./fetch-skills.sh`,
 
 Pré-requisitos por provider (ver `files/tools/agents/agents.json`):
 
-- `claude` autenticado (task-manager, researcher-deep, codebase-explorer, implementer, deep-debugger, verifier, docs-mechanical)
-- `codex` autenticado com acesso ao modelo definido em `agents.json` (planner, code-reviewer, security-reviewer). Só gasta o saldo da conta; limite atingido = `BLOCKED`, nunca troca de modelo
+- `claude` autenticado (task-manager, researcher-deep, codebase-explorer, implementer, deep-debugger, security-reviewer, verifier, docs-mechanical)
+- `codex` autenticado com acesso ao modelo definido em `agents.json` (planner, code-reviewer). Só gasta o saldo da conta; limite atingido = `BLOCKED`, nunca troca de modelo
 - `agy` (Gemini) — opcional; sem ele, `researcher-primary` e `implementation-worker` ficam `BLOCKED` e o fallback é o implementer
 
 Skills — duas opções:

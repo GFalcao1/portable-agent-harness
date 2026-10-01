@@ -21,15 +21,15 @@ pode recomendar reclassificação, mas o orchestrator decide e registra.
 
 ## Rota padrão por nível
 
-| Nível | Workflow padrão | Chamadas Astra |
+| Nível | Workflow padrão | Chamadas Codex |
 |---|---|---|
 | TRIVIAL | Orchestrator direto | 0 |
 | SMALL | Implementer direto (lane B com `implementation-worker`/AGY só depois do smoke test por papel); verifier ao final | 0 |
-| IMPORTANT | Codebase-explorer/researcher-primary quando necessário → implementer → code-reviewer (Astra) → verifier | 1 |
-| CRITICAL | Task-manager quando necessário → researcher-primary/researcher-deep/codebase-explorer → planner (Astra) → requirement gate do orchestrator → implementer → code-reviewer (Astra) → security-reviewer quando aplicável → verifier | 2 (+1 se security-reviewer) |
+| IMPORTANT | Codebase-explorer/researcher-primary quando necessário → implementer → code-reviewer (GPT-6.1 Sol) → verifier | 1 |
+| CRITICAL | Task-manager quando necessário → researcher-primary/researcher-deep/codebase-explorer → planner (Astra) → requirement gate do orchestrator → implementer → code-reviewer (GPT-6.1 Sol) → security-reviewer (Fable 5.1, fora do saldo Codex) quando aplicável → verifier | 2 |
 
 **O planner só é chamado em CRITICAL.** **IMPORTANT e CRITICAL nunca vão para a
-lane B.** O Astra consome apenas o limite/saldo da conta ChatGPT/Codex
+lane B.** Os papéis Codex consomem apenas o limite/saldo da conta ChatGPT/Codex
 vinculada; BLOCKED por limite encerra a etapa sem troca de modelo.
 Se `agy` não estiver instalado na máquina, o fallback é o implementer direto
 (Sonnet), nunca uma troca silenciosa de modelo.

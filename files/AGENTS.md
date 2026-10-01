@@ -71,7 +71,7 @@ TRIVIAL não usa Task Manager, planner nem o pipeline completo por padrão.
   de segurança ou incompatibilidade externa nunca é assumida em silêncio.
 - Nenhum papel executa push, deploy, exclusão ou qualquer ação irreversível
   sem OK explícito do humano.
-- Os papéis Codex (planner, code-reviewer, security-reviewer) só usam o
+- Os papéis Codex (planner, code-reviewer) só usam o
   saldo/limite da conta Codex/ChatGPT vinculada; limite atingido é BLOCKED
   — nunca upgrade, nunca troca de modelo (detalhe completo:
   `references/orcamento-e-lanes.md`).

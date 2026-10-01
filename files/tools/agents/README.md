@@ -4,7 +4,7 @@ This layer only serves the twelve spawned roles of this project plus the
 orchestrator. The orchestrator is the main Claude Code session and it is
 the one holding decisions and task state. The `multi-agent` skill prepares
 self contained handoffs and this wrapper calls the Claude Code CLI, the
-Codex CLI (for planner, code reviewer and security reviewer) and AGY,
+Codex CLI (for planner and code reviewer) and AGY,
 whenever it is installed. There is no server and no daemon running
 anywhere.
 
@@ -20,13 +20,17 @@ plus the twelve spawned roles (`task-manager`, `planner`,
 declared and covered by a test, it says nothing about authentication,
 quota or future availability.
 
-`planner`, `code-reviewer` and `security-reviewer` are intentionally routed
-to the Codex CLI, kept consistent with the task contracts under `task/`;
-see `docs/agent-workflow.md` for the design rationale.
+`planner` and `code-reviewer` are intentionally routed to the Codex CLI;
+`security-reviewer` runs on the Claude Code CLI. Both reviewers get only the
+task idea plus the affected file paths and must answer `VERDICT: APPROVED`
+or `VERDICT: REJECTED` followed by one `- file:line | WRONG: ... | FIX: ...`
+line per blocking problem (`REVIEW_CONTRACT` in `delegate.py`). Run them
+with `--root <worktree>` so they read the reviewed branch. See
+`docs/agent-workflow.md` for the design rationale.
 
 ## Account budget for the Codex-based roles
 
-The Codex-based roles (planner, code reviewer, security reviewer) only
+The Codex-based roles (planner, code reviewer) only
 spend whatever limit the linked ChatGPT/Codex account already has;
 `agents.json` does not need a dedicated field for this since the
 enforcement lives in the wrapper and in the harness instructions, not in
@@ -50,7 +54,7 @@ Budget per task lives in `.agents/skills/multi-agent/references/orcamento-e-lane
 The wrapper runs Claude roles with `--restricted --strict-mcp-config` and,
 for every single invocation, builds a throwaway plugin that only symlinks
 the skills that specific role is allowed to see. Codex roles (planner, code
-reviewer, security reviewer) get the same skill text prepended to the
+reviewer) get the same skill text prepended to the
 prompt instead, since Codex has no `--plugin-dir` mechanism. Resolution
 checks `.agents/skills/<name>` inside this project first (managed by
 `skills-lock.json`), and only falls back to the plugin cache after that.
@@ -64,8 +68,9 @@ checks `.agents/skills/<name>` inside this project first (managed by
 * deep debugger gets `caveman/caveman` plus
   `superpowers/systematic-debugging`; confirm this skill actually resolves
   on the current machine before treating the role as READY there
-* code reviewer and security reviewer both get `caveman/caveman` plus
-  `mattpocock-skills/engineering/code-review`
+* code reviewer and security reviewer get only `caveman/caveman`; the
+  `code-review` skill was dropped because it asks for a diff and a long
+  report, which conflicts with the short verdict contract
 * researcher primary and implementation worker get nothing at all, they run
   through AGY with `--disable-slash-commands`
 
@@ -90,8 +95,8 @@ python3 tools/agents/delegate.py --agent codebase-explorer --prompt-file /tmp/ta
 python3 tools/agents/delegate.py --agent researcher-primary < /tmp/pesquisa.txt
 python3 tools/agents/delegate.py --agent planner < /tmp/tarefa.txt          # CRITICAL only
 python3 tools/agents/delegate.py --agent implementer < /tmp/plano-aprovado.txt
-python3 tools/agents/delegate.py --agent code-reviewer < /tmp/diff-e-plano.txt
-python3 tools/agents/delegate.py --agent security-reviewer < /tmp/diff-e-plano.txt   # quando aplicável
+python3 tools/agents/delegate.py --agent code-reviewer --root <worktree> --prompt-file /tmp/review.txt
+python3 tools/agents/delegate.py --agent security-reviewer --root <worktree> --prompt-file /tmp/review.txt   # quando aplicável
 python3 tools/agents/delegate.py --agent verifier --test-suite audit < /tmp/verificacao.txt
 ```
 

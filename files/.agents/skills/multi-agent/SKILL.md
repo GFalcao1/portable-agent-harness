@@ -1,6 +1,6 @@
 ---
 name: multi-agent
-description: Coordena pesquisa, planos, implementação, revisão independente e verificação do projeto com doze papéis especializados de modelo fixo (roteados por `tools/agents/agents.json`), incluindo planner/code-reviewer/security-reviewer via Codex CLI restritos ao limite da conta ligada.
+description: Coordena pesquisa, planos, implementação, revisão independente e verificação do projeto com doze papéis especializados de modelo fixo (roteados por `tools/agents/agents.json`), incluindo planner e code-reviewer via Codex CLI restritos ao limite da conta ligada; security-reviewer via Claude Code CLI. Reviewers recebem só ideia da task + arquivos afetados e devolvem VERDICT APPROVED/REJECTED curto.
 ---
 
 # Workflow local — multi-agente

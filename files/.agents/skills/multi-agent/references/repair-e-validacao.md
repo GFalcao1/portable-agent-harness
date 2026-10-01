@@ -11,14 +11,13 @@ externa nunca pode ser assumida em silêncio.
 
 ## Repair loop
 
-Repair automático roda no máximo uma vez. Entrada: os quatro campos de
-finding (SEVERITY, ONDE, POR QUE, CORRIGIR — ver `references/papeis.md`). O
-implementer recebe só os findings, o contexto mínimo e os hunks
-necessários — nunca o diff inteiro sem necessidade. Depois do repair:
-rodar de novo os testes afetados; o reviewer pode receber apenas os
-findings anteriores, os hunks alterados e a evidência nova. Se a segunda
-revisão ainda reprovar, escala para o orchestrator — não há segunda rodada
-automática.
+Repair automático roda no máximo uma vez. Entrada: as linhas do
+`VERDICT: REJECTED` (arquivo:linha, WRONG, FIX — ver "Contrato dos
+reviewers" em `references/papeis.md`). O implementer recebe só essas
+linhas e o contexto mínimo. Depois do repair: rodar de novo os testes
+afetados; o reviewer recebe de novo só a ideia da task, os arquivos
+afetados e as linhas REJECTED anteriores. Se a segunda revisão ainda
+reprovar, escala para o orchestrator — não há segunda rodada automática.
 
 ## Regras de autoridade e divergências
 

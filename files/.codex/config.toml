@@ -1,5 +1,5 @@
-# Codex CLI faz parte da matriz: planner, code-reviewer e security-reviewer
-# rodam em gpt-6-astra via `codex exec`, spawnados por tools/agents/delegate.py
+# Codex CLI faz parte da matriz: planner (gpt-6-astra) e code-reviewer
+# (gpt-6.1-sol) rodam via `codex exec`, spawnados por tools/agents/delegate.py
 # com modelo e effort travados no argv. NAO pine modelo aqui: a unica fonte de
 # verdade e tools/agents/agents.json. Este arquivo nao e instalado no projeto
 # (install.py o ignora); serve so como lembrete de que o Codex precisa estar

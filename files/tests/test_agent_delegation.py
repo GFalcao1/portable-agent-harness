@@ -781,8 +781,8 @@ def test_roster_matches_the_approved_matrix() -> None:
         "implementer": ("claude-sonnet-5-5", "medium", "Claude Code CLI"),
         "implementation-worker": ("gemini-3.8-flash-medium", None, "AGY"),
         "deep-debugger": ("claude-opus-5-5", "high", "Claude Code CLI"),
-        "code-reviewer": ("gpt-6-astra", "medium", "Codex CLI"),
-        "security-reviewer": ("gpt-6-astra", "medium", "Codex CLI"),
+        "code-reviewer": ("gpt-6.1-sol", "medium", "Codex CLI"),
+        "security-reviewer": ("claude-fable-5-1", "medium", "Claude Code CLI"),
         "verifier": ("claude-sonnet-5-5", "medium", "Claude Code CLI"),
         "docs-mechanical": ("claude-sonnet-5-5", "low", "Claude Code CLI"),
     }
@@ -1001,7 +1001,7 @@ def test_token_budget_rules_reach_every_spawned_agent(
     assert str(delegate.ROLE_OUTPUT_CEILING["codebase-explorer"]) in prompt
 
 
-# --- Provider Codex: planner, code-reviewer e security-reviewer rodam em Astra (gpt-6-astra) ---
+# --- Provider Codex: planner (gpt-6-astra) e code-reviewer (gpt-6.1-sol) ---
 
 
 def _fake_codex_body(dump: Path, final: str = "CODEX REPORT") -> str:
@@ -1034,7 +1034,7 @@ def test_codex_reviewer_pins_model_effort_and_readonly_sandbox(
     assert result["response"] == "CODEX REPORT"
     argv = json.loads(dump.read_text(encoding="utf-8"))
     assert argv[1] == "exec"
-    assert argv[argv.index("--model") + 1] == "gpt-6-astra"
+    assert argv[argv.index("--model") + 1] == "gpt-6.1-sol"
     assert "model_reasoning_effort=medium" in argv
     assert argv[argv.index("--sandbox") + 1] == "read-only"
     assert "--ephemeral" in argv
@@ -1042,26 +1042,56 @@ def test_codex_reviewer_pins_model_effort_and_readonly_sandbox(
 
 
 @requires_posix
-def test_codex_security_reviewer_pins_model_effort_and_readonly_sandbox(
+def test_codex_reviewer_prompt_carries_short_verdict_contract(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     fake_bin: Path,
 ) -> None:
     dump = fake_bin.parent / "argv.json"
-    _write_fake_cli(fake_bin / "codex", _fake_codex_body(dump, "SECURITY REPORT"))
+    captured = fake_bin.parent / "prompt.txt"
+    body = _fake_codex_body(dump).replace(
+        "sys.stdin.read()\n", f"open({str(captured)!r}, 'w').write(sys.stdin.read())\n"
+    )
+    _write_fake_cli(fake_bin / "codex", body)
+
+    _, exit_code = _run_main(monkeypatch, capsys, ["--agent", "code-reviewer"])
+
+    assert exit_code == 0
+    prompt = captured.read_text(encoding="utf-8")
+    assert "VERDICT: APPROVED" in prompt
+    assert "VERDICT: REJECTED" in prompt
+    assert "WRONG:" in prompt and "FIX:" in prompt
+    assert "Report only what blocks approval" in prompt
+
+
+@requires_posix
+def test_security_reviewer_runs_fable_readonly_with_verdict_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    fake_bin: Path,
+) -> None:
+    argv_dump = fake_bin.parent / "argv.json"
+    prompt_dump = fake_bin.parent / "prompt.txt"
+    body = (
+        "import sys, json\n"
+        f"open({str(argv_dump)!r}, 'w').write(json.dumps(sys.argv))\n"
+        f"open({str(prompt_dump)!r}, 'w').write(sys.stdin.read())\n"
+        + _claude_success_body("claude-fable-5-1").replace("sys.stdin.read()\n", "")
+    )
+    _write_fake_cli(fake_bin / "claude", body)
 
     result, exit_code = _run_main(monkeypatch, capsys, ["--agent", "security-reviewer"])
 
     assert exit_code == 0
     assert result["status"] == "PASS"
-    assert result["response"] == "SECURITY REPORT"
-    argv = json.loads(dump.read_text(encoding="utf-8"))
-    assert argv[1] == "exec"
-    assert argv[argv.index("--model") + 1] == "gpt-6-astra"
-    assert "model_reasoning_effort=medium" in argv
-    assert argv[argv.index("--sandbox") + 1] == "read-only"
-    assert "--ephemeral" in argv
-    assert "--json" in argv
+    argv = json.loads(argv_dump.read_text(encoding="utf-8"))
+    assert argv[argv.index("--model") + 1] == "claude-fable-5-1"
+    assert argv[argv.index("--effort") + 1] == "medium"
+    assert argv[argv.index("--tools") + 1] == "Read,Glob,Grep"
+    assert argv[argv.index("--permission-mode") + 1] == "dontAsk"
+    prompt = prompt_dump.read_text(encoding="utf-8")
+    assert "VERDICT: APPROVED" in prompt
+    assert "VERDICT: REJECTED" in prompt
 
 
 @requires_posix
@@ -1164,11 +1194,14 @@ def test_codex_usage_is_reported_when_the_provider_supplies_it(
     assert result["usage"] == {"input_tokens": 120, "output_tokens": 30}
 
 
-def test_astra_roles_route_through_codex() -> None:
+def test_reviewer_and_planner_routing() -> None:
     agents = delegate.load_agents()
-    for role in ("planner", "code-reviewer", "security-reviewer"):
-        assert agents[role]["model"] == "gpt-6-astra", role
+    assert agents["planner"]["model"] == "gpt-6-astra"
+    assert agents["code-reviewer"]["model"] == "gpt-6.1-sol"
+    for role in ("planner", "code-reviewer"):
         assert agents[role]["provider"] == "Codex CLI", role
+    assert agents["security-reviewer"]["model"] == "claude-fable-5-1"
+    assert agents["security-reviewer"]["provider"] == "Claude Code CLI"
 
 
 # --- Isolamento de escrita com dois escritores ---

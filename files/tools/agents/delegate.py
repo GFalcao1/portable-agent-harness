@@ -40,6 +40,7 @@ ROLE_TOOLS: dict[str, list[str]] = {
     "codebase-explorer": ["Read", "Glob", "Grep"],
     "implementer": ["Read", "Glob", "Grep", "Edit", "Write"],
     "deep-debugger": ["Read", "Glob", "Grep"],
+    "security-reviewer": ["Read", "Glob", "Grep"],
     "verifier": ["Read", "Glob", "Grep"],
     "docs-mechanical": ["Read", "Glob", "Grep", "Edit", "Write"],
 }
@@ -49,6 +50,7 @@ PERMISSION_MODES: dict[str, str] = {
     "codebase-explorer": "dontAsk",
     "implementer": "acceptEdits",
     "deep-debugger": "dontAsk",
+    "security-reviewer": "dontAsk",
     "verifier": "dontAsk",
     "docs-mechanical": "acceptEdits",
 }
@@ -78,14 +80,10 @@ ROLE_SKILLS: dict[str, tuple[str, ...]] = {
         "caveman/caveman",
         "superpowers/systematic-debugging",
     ),
-    "code-reviewer": (
-        "caveman/caveman",
-        "mattpocock-skills/engineering/code-review",
-    ),
-    "security-reviewer": (
-        "caveman/caveman",
-        "mattpocock-skills/engineering/code-review",
-    ),
+    # Reviewers sem a skill code-review: ela pede diff e relatorio longo,
+    # e o contrato aqui e veredito curto (ver REVIEW_CONTRACT).
+    "code-reviewer": ("caveman/caveman",),
+    "security-reviewer": ("caveman/caveman",),
     "verifier": ("caveman/caveman",),
     "docs-mechanical": ("caveman/caveman",),
     # researcher-primary and implementation-worker run through AGY: no
@@ -114,11 +112,34 @@ ROLE_OUTPUT_CEILING: dict[str, int] = {
     "implementer": 80,
     "implementation-worker": 80,
     "deep-debugger": 80,
-    "code-reviewer": 40,
-    "security-reviewer": 40,
+    "code-reviewer": 20,
+    "security-reviewer": 20,
     "verifier": 40,
     "docs-mechanical": 60,
 }
+
+
+# Contrato dos dois reviewers: entrada = ideia da task + arquivos afetados;
+# saida = veredito binario e, se reprovado, so o que bloqueia, em poucos tokens.
+REVIEWER_ROLES: frozenset[str] = frozenset({"code-reviewer", "security-reviewer"})
+REVIEW_CONTRACT = (
+    " Review contract, binding: the task gives you only the idea of the "
+    "change and the affected file paths. Read those files (and only the "
+    "minimum around them needed to judge) and decide whether the change is "
+    "approved. Report only what blocks approval; no optional suggestions, "
+    "no praise, no summary, no restating the task. Reply with exactly one "
+    "of these two shapes and nothing else:\n"
+    "VERDICT: APPROVED\n"
+    "or\n"
+    "VERDICT: REJECTED\n"
+    "- <file:line> | WRONG: <what is wrong, one short sentence> | FIX: "
+    "<concrete action, one short sentence>\n"
+    "(one '-' line per blocking problem)."
+)
+
+
+def review_contract_clause(agent: str) -> str:
+    return REVIEW_CONTRACT if agent in REVIEWER_ROLES else ""
 
 
 def token_budget_clause(agent: str) -> str:
@@ -143,7 +164,7 @@ def token_budget_clause(agent: str) -> str:
         "instead of quoting them whole; prefer `rg` and targeted excerpts "
         "over full reads; use the project's approved test command and report "
         "only failures; never redo research, reading, or tests another role "
-        "already evidenced." + overflow
+        "already evidenced." + overflow + review_contract_clause(agent)
     )
 
 
@@ -414,7 +435,7 @@ def _claude_parse_error(
 
 
 # Limite de uso atingido e BLOCKED, nunca FAIL nem troca de modelo. Os papeis
-# Astra (gpt-6-astra via Codex CLI) consomem apenas o limite/saldo da conta
+# Codex (planner gpt-6-astra, code-reviewer gpt-6.1-sol) consomem so o saldo da conta
 # ChatGPT/Codex vinculada; o wrapper nunca solicita nem aceita uso extra alem
 # desse limite.
 QUOTA_MARKERS: tuple[str, ...] = (

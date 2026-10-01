@@ -75,16 +75,16 @@
   },
   "code-reviewer": {
     "provider": "Codex CLI",
-    "requested_model": "Astra",
-    "model": "gpt-6-astra",
+    "requested_model": "GPT-6.1 Sol",
+    "model": "gpt-6.1-sol",
     "reasoning_effort": "medium",
     "mode": "read-only",
     "status": "READY"
   },
   "security-reviewer": {
-    "provider": "Codex CLI",
-    "requested_model": "Astra",
-    "model": "gpt-6-astra",
+    "provider": "Claude Code CLI",
+    "requested_model": "Fable 5.1",
+    "model": "claude-fable-5-1",
     "reasoning_effort": "medium",
     "mode": "read-only",
     "status": "READY"

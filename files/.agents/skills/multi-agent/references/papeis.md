@@ -143,28 +143,60 @@ comum não bastou. Não substitui automaticamente o implementer.
 
 Output: REPRODUCTION; ROOT_CAUSE; CAUSAL_CHAIN; MINIMAL_FIX; RISKS.
 
+## Contrato dos reviewers (code e security)
+
+Vale para os dois reviewers. O wrapper injeta o formato de saída no prompt
+(`REVIEW_CONTRACT` em `tools/agents/delegate.py`).
+
+Recebe **só**: a ideia da task (poucas linhas: o que muda e por quê) e a
+lista de arquivos afetados (caminhos). Nada de diff colado, plano, reasoning
+do implementer, logs ou resultado de teste. O reviewer lê os arquivos
+sozinho, read-only.
+
+Devolve **só** uma das duas formas, sem resumo, elogio nem sugestão opcional:
+
+```
+VERDICT: APPROVED
+```
+
+```
+VERDICT: REJECTED
+- <arquivo:linha> | WRONG: <o que está errado, uma frase curta> | FIX: <ação concreta, uma frase curta>
+```
+
+Uma linha `-` por problema que bloqueia a aprovação. Problema que não
+bloqueia não é reportado.
+
+### Como o orchestrator monta a entrada
+
+- Ideia: 2–5 linhas tiradas do arquivo da task (o que muda, por quê, critério
+  de aceite principal).
+- Arquivos: `git diff --name-only <base>...HEAD` na worktree da task (base =
+  branch de onde ela saiu, normalmente `main`), um caminho por linha.
+- Rodar com `--root <worktree>`: sem isso o reviewer lê o checkout principal,
+  não a branch revisada.
+
+```sh
+git -C <worktree> diff --name-only main...HEAD > /tmp/arquivos.txt
+{ printf 'IDEIA:\n%s\n\nARQUIVOS:\n' "<ideia>"; cat /tmp/arquivos.txt; } > /tmp/review.txt
+python3 tools/agents/delegate.py --agent code-reviewer --root <worktree> --prompt-file /tmp/review.txt
+```
+
 ## Code Reviewer
 
-Read-only, revisão independente. Não altera código, não recebe reasoning ou
-justificativa do implementer — só task, critérios de aceite, plano aprovado
-quando existir, diff e resultados de teste relevantes. Verifica: bugs,
-regressões, requisitos não atendidos, problemas de segurança, concorrência,
-tratamento de erro, comportamento destrutivo, inconsistência arquitetural,
-contrato quebrado, complexidade desnecessária.
-
-Findings, exatamente quatro campos por item: SEVERITY (CRITICAL|HIGH|MEDIUM
-|LOW); ONDE (arquivo:linha); POR QUE (uma frase); CORRIGIR (ação concreta).
-Sem problema, declarar isso.
+Codex CLI (modelo e effort em `tools/agents/agents.json`). Read-only, revisão
+independente, contrato acima. Procura: bugs, regressões, requisito da task
+não atendido, concorrência, tratamento de erro, comportamento destrutivo,
+contrato quebrado, violação das convenções do projeto (`CLAUDE.md`/`AGENTS.md`).
 
 ## Security Reviewer
 
-Read-only, mesmo formato de findings do code reviewer. Acionar quando a
-mudança envolve materialmente: autenticação, autorização, credenciais,
-secrets, dados sensíveis/PII, upload, parsing não confiável, execução
-externa, rede, SQL, permissões, operações destrutivas ou outra superfície
-de ataque relevante. Não implementa.
-
-Recebe: task, diff, threat surface, arquitetura relevante.
+Claude Code CLI (modelo e effort em `tools/agents/agents.json`). Read-only,
+contrato acima. Acionar quando a mudança envolve materialmente:
+autenticação, autorização, credenciais, secrets, dados sensíveis/PII,
+upload, parsing não confiável, execução externa, rede, SQL, permissões,
+operações destrutivas ou outra superfície de ataque relevante. Não
+implementa. Não consome saldo Codex.
 
 ## Verifier
 

@@ -9,6 +9,12 @@ detail, read `AGENTS.md`, `.agents/skills/multi-agent/SKILL.md` and its
 
 ## Changelog
 
+* Emenda 2026-10-01: code-reviewer moved from Astra to GPT-6.1 Sol (Codex
+  CLI, medium); security-reviewer moved off Codex to Fable 5.1 (Claude Code
+  CLI, medium). Both reviewers now get only the task idea plus the affected
+  file paths and answer a binary verdict (`VERDICT: APPROVED` /
+  `VERDICT: REJECTED` with one `file:line | WRONG | FIX` line per blocking
+  problem), to cut review tokens. Planner unchanged (Astra).
 * Emenda 2026-09-28: roster expanded from the seven-role baseline below to
   the current thirteen-entry matrix (orchestrator plus twelve spawned
   roles). Live roster: `tools/agents/agents.json`. Live role

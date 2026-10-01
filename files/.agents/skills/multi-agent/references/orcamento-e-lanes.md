@@ -2,8 +2,7 @@
 
 ## Regra de saldo — inegociável
 
-Os papéis rodando via Codex CLI (planner, code-reviewer, security-reviewer)
-usam somente o limite/saldo da conta ChatGPT/Codex vinculada. Nunca:
+Os papéis rodando via Codex CLI (planner, code-reviewer) usam somente o limite/saldo da conta ChatGPT/Codex vinculada. Nunca:
 solicitar upgrade, habilitar uso extra, comprar créditos, pedir ao usuário
 créditos para concluir a task, aumentar limite artificialmente, ou
 substituir esses papéis silenciosamente por outro modelo.
@@ -18,9 +17,10 @@ dentro da mesma task, ou degradar o workflow em silêncio.
 
 ## Orçamento por nível
 
-- CRITICAL: no máximo 1 chamada ao planner + 1 ao code-reviewer. O security
-  reviewer pode consumir uma chamada adicional só quando segurança for
-  materialmente relevante (ver gatilhos em `references/papeis.md`).
+- CRITICAL: no máximo 1 chamada ao planner + 1 ao code-reviewer. O
+  security-reviewer (Claude Code CLI, fora do saldo Codex) entra só
+  quando segurança for materialmente relevante (gatilhos em
+  `references/papeis.md`), 1 chamada.
 - IMPORTANT: no máximo 1 chamada ao code-reviewer.
 - SMALL / TRIVIAL: 0 chamadas aos papéis Codex.
 
